@@ -1,17 +1,31 @@
 ﻿import os
 
 # Укажите путь к нужной папке ('.' — текущая папка)
-root_dir = '..'
+root_dir = '.'
 # Имя файла, куда всё запишется
 output_file = 'result.txt'
 
+# Список папок, в которые скрипт вообще НЕ БУДЕТ заходить
+ignore_dirs = {'.venv', '.idea', '.git', '__pycache__'}
+
+# Список расширений файлов, которые нужно ПРОПУСТИТЬ
+ignore_extensions = {'.xml', '.json', '.txt', '.iml', '.pyc'}
+
 with open(output_file, 'w', encoding='utf-8') as out_f:
     for root, dirs, files in os.walk(root_dir):
+
+        # Модифицируем список dirs на месте, чтобы os.walk игнорировал эти папки
+        dirs[:] = [d for d in dirs if d not in ignore_dirs]
+
         for file in files:
             # Пропускаем сам файл результата, чтобы он не записывал сам себя
             if file == output_file:
                 continue
-                
+
+            # Проверяем расширение файла. Если оно в списке игнорируемых — пропускаем
+            file_ext = os.path.splitext(file)[1].lower()
+            if file_ext in ignore_extensions:
+                continue
 
             file_path = os.path.join(root, file)
 
@@ -30,4 +44,4 @@ with open(output_file, 'w', encoding='utf-8') as out_f:
                 # Если файл бинарный (картинка, архив), пишем ошибку вместо содержимого
                 out_f.write(f"[Не удалось прочитать файл. Ошибка: {e}]\n")
 
-print(f"Готово! Содержимое всех файлов успешно сохранено в {output_file}")
+print(f"Готово! Содержимое файлов успешно сохранено в {output_file}")

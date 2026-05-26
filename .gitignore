@@ -37,3 +37,5 @@ env/
 # Итоговый текстовый файл сборки проекта и сам скрипт сборщика (если он локальный)
 not_necessary/result.txt
 not_necessary/script.py
+result.txt
+script.py
