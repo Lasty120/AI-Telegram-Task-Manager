@@ -61,7 +61,8 @@ async def init_scheduler(bot: Bot, db_path: str):
                         'task_text': task['content']
                     },
                     id=f"task_{task['id']}",
-                    replace_existing=True
+                    replace_existing=True,
+                    misfire_grace_time=3600
                 )
         except Exception as e:
             logging.error(f"Ошибка при загрузке задачи ID {task.get('id')} в планировщик: {e}")

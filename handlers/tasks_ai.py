@@ -1,14 +1,12 @@
-﻿from aiogram import Router, F
+from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.fsm.context import FSMContext
-from aiosqlite import Connection,Row
+from aiosqlite import Connection, Row
 
 from services.ai_service import parse_user_text
-
-from database.crud.task import create_task
 from services.task_actions import handle_create_task
 
 router = Router()
+
 
 @router.message(F.text)
 async def process_task_handler(
@@ -16,26 +14,33 @@ async def process_task_handler(
         db: Connection,
         user: Row
 ):
-        waiting_msg = await message.answer("🧠 Думаю...")
+    waiting_msg = await message.answer("🧠 Думаю...")
 
-        # Отправляем текст в ИИ
-        parsed_command = await parse_user_text(message.text)
+    # Отправляем текст в ИИ
+    parsed_command = await parse_user_text(message.text)
 
-        await waiting_msg.delete()
+    await waiting_msg.delete()
 
-        if isinstance(parsed_command, str):  # Если вернулась ошибка
-            await message.answer(parsed_command)
-            return
+    if isinstance(parsed_command, str):  # Если вернулась ошибка
+        await message.answer(parsed_command)
+        return
 
-        # МАРШРУТИЗАЦИЯ
-        if parsed_command.action == "create":
-            await handle_create_task(db=db, user=user, command=parsed_command, message=message)
+    tasks = parsed_command.tasks
 
-        elif parsed_command.action == "update":
-            await message.answer(f"🔄 Изменяю задачу... (В разработке)")
+    if not tasks:
+        await message.answer("🤷‍♂️ Не нашёл никаких задач в вашем сообщении. Попробуйте написать иначе.")
+        return
 
-        elif parsed_command.action == "delete":
-            await message.answer(f"🗑 Удаляю задачу... (В разработке)")
+    # Обрабатываем каждую распознанную задачу по очереди
+    for task_cmd in tasks:
+        if task_cmd.action == "create":
+            await handle_create_task(db=db, user=user, command=task_cmd, message=message)
+
+        elif task_cmd.action == "update":
+            await message.answer(f"🔄 Изменяю задачу '{task_cmd.content}'... (В разработке)")
+
+        elif task_cmd.action == "delete":
+            await message.answer(f"🗑 Удаляю задачу '{task_cmd.content}'... (В разработке)")
 
         else:
-            await message.answer("🤷‍♂️ Не совсем понял, что нужно сделать. Напиши иначе.")
+            await message.answer(f"🤷‍♂️ Не совсем понял, что нужно сделать с '{task_cmd.content or message.text}'.")
