@@ -1,7 +1,4 @@
-﻿import aiosqlite
-
-
-
+import aiosqlite
 
 
 async def init_db(db_path: str):

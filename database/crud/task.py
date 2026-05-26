@@ -1,18 +1,21 @@
-﻿import aiosqlite
+import aiosqlite
 from database.models import TaskStatus
 
-async def create_task(db: aiosqlite.Connection, content: str, target_time: int, user_id: int):
+async def create_task(db: aiosqlite.Connection, content: str, time: int, user_id: int) -> int:
     """
     Записывает задачу с точным временем unix timestamp, когда должно сработать напоминание.
     """
-    await db.execute(
+    async with db.execute(
         """
         INSERT INTO tasks (content, time, user_id) 
         VALUES (?, ?, ?)
         """,
-        (content, target_time, user_id)
-    )
+        (content, time, user_id)
+    ) as cursor:
+        last_id = cursor.lastrowid
+
     await db.commit()
+    return last_id
 
 
 async def get_user_tasks(db: aiosqlite.Connection, user_id: int) -> list[aiosqlite.Row]:
