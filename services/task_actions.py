@@ -1,14 +1,13 @@
-﻿from services.scheduler import scheduler, send_task_notification
+from datetime import datetime, timedelta
+import pytz
 from aiogram import Bot
 from aiogram.types import Message
-from database.schemas import TaskActionSchema
-
-from datetime import datetime
-import pytz
-
-from database.crud.task import create_task
-
 from aiosqlite import Connection, Row
+
+from database.schemas import TaskActionSchema
+from database.crud.task import create_task
+from services.scheduler import scheduler, send_task_notification
+
 
 async def handle_create_task(
         command: TaskActionSchema,
@@ -16,41 +15,47 @@ async def handle_create_task(
         db: Connection,
         user: Row
 ):
+    tz = pytz.timezone('Asia/Almaty')
+
     if not command.time:
-        await message.answer("⚠️ Пожалуйста, укажите время для напоминания.")
-        return
-
-    try:
-        # 1. Парсим и переводим в UNIX-время для БД
-        tz = pytz.timezone('Asia/Almaty')
-        naive_dt = datetime.strptime(command.time, "%Y-%m-%d %H:%M")
-        localized_dt = tz.localize(naive_dt)
+        # Гибридный подход: если ИИ не вернул время, ставим дефолт на сегодня.
+        # Например, на 18:00, а если уже вечер, то на +2 часа от текущего времени.
+        now = datetime.now(tz)
+        localized_dt = now + timedelta(hours=2)
         task_timestamp = int(localized_dt.timestamp())
-    except Exception as e:
-        await message.answer("⚠️ Некорректный формат времени. Пожалуйста, используйте YYYY-MM-DD HH:MM.")
-        return
+        display_time = localized_dt.strftime("%Y-%m-%d %H:%M")
+    else:
+        # Парсим время, присланное ИИ
+        try:
+            naive_dt = datetime.strptime(command.time, "%Y-%m-%d %H:%M")
+            localized_dt = tz.localize(naive_dt)
+            task_timestamp = int(localized_dt.timestamp())
+            display_time = command.time
+        except Exception:
+            await message.answer("⚠️ Некорректный формат времени от ИИ")
+            return
 
-    # 2. Сохраняем в БД (записываем timestamp) и получаем ID
+    # 1. Сохраняем в БД и получаем ID новой задачи
     new_task_id = await create_task(
         db=db,
-        user_id=user['id'], # обращение по ключу
-        time=str(task_timestamp), # записываем timestamp как строку/число
+        user_id=user['id'],  # Обращение как к Row (по ключу)
+        time=task_timestamp,
         content=command.content,
     )
 
-    # 3. Добавляем в планировщик. run_date принимает localized_dt напрямую
+    # 2. Добавляем в планировщик на лету
     bot: Bot = message.bot
     scheduler.add_job(
         send_task_notification,
         trigger='date',
-        run_date=localized_dt, # Передаем timezone-aware datetime объект
+        run_date=localized_dt,  # Объект datetime
         kwargs={
             'bot': bot,
-            'user_id': user['tg_id'], # Передаем Telegram ID, а не внутренний ID БД!
+            'user_id': user['tg_id'],  # Передаем Telegram ID для отправки уведомления
             'task_text': command.content
         },
         id=f"task_{new_task_id}",
         replace_existing=True
     )
 
-    await message.answer(f"✅ Создана задача: {command.content} на {command.time}")
+    await message.answer(f"✅ Создана задача: {command.content} на {display_time}")

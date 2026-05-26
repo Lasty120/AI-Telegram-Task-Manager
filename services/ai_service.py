@@ -1,14 +1,12 @@
-﻿from openai import AsyncOpenAI
+from openai import AsyncOpenAI
 from pydantic import ValidationError
 from datetime import datetime
 import pytz
 
-from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY,OPENAI_DEFAULT_URL
-
+from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL
 from database.schemas import TaskActionSchema
 from services.prompts import get_system_prompt
 
-# Твои импорты из конфига...
 client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
 
