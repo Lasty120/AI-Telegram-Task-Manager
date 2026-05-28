@@ -1,4 +1,4 @@
-﻿from aiogram import F, Router
+from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
@@ -32,9 +32,12 @@ async def get_my_tasks_handler(
         # Декодируем timestamp обратно в объект datetime
         task_datetime = datetime.fromtimestamp(task['time'])
         # Форматируем в строку, например "18:30" (или "%d.%m %H:%M" если важна дата)
-        formatted_time = task_datetime.strftime('%H:%M')
+        formatted_time = task_datetime.strftime('%d.%m %H:%M')
 
-        response_lines.append(f"{index}. *{task['content']}* — ⏰ {formatted_time}")
+        task_line = f"{index}. *{task['content']}* — ⏰ {formatted_time}"
+        if task['details']:
+            task_line += f"\n   _{task['details']}_"
+        response_lines.append(task_line)
 
     response_text = "\n".join(response_lines)
 
@@ -66,7 +69,9 @@ async def next_task_handler(
     response_text = (
         f"⏰ *Ваша ближайшая задача:*\n\n"
         f"📝 {task['content']}\n"
-        f"📅 Время: {formatted_time}"
     )
+    if task['details']:
+        response_text += f"📖 Детали: {task['details']}\n"
+    response_text += f"📅 Время: {formatted_time}"
 
     await message.answer(response_text, parse_mode='Markdown')

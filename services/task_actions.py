@@ -42,6 +42,7 @@ async def handle_create_task(
         user_id=user['id'],  # Обращение как к Row (по ключу)
         time=task_timestamp,
         content=command.content,
+        details=command.details,
     )
 
     # 2. Добавляем в планировщик на лету
@@ -53,10 +54,15 @@ async def handle_create_task(
         kwargs={
             'bot': bot,
             'user_id': user['tg_id'],  # Передаем Telegram ID для отправки уведомления
-            'task_text': command.content
+            'task_text': command.content,
+            'task_details': command.details,
+            'task_id': new_task_id
         },
         id=f"task_{new_task_id}",
         replace_existing=True
     )
 
-    await message.answer(f"✅ Создана задача: {command.content} на {display_time}", reply_markup=get_main_kb())
+    confirm_text = f"✅ Создана задача: {command.content} на {display_time}"
+    if command.details:
+        confirm_text += f"\n📖 Детали: {command.details}"
+    await message.answer(confirm_text, reply_markup=get_main_kb())

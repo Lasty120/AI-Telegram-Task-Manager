@@ -15,12 +15,16 @@ from config import DB_PATH as db_path
 scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
 
 
-async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int):
+async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
     """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
+        text = f"🔔 <b>Напоминание:</b>\n{task_text}"
+        if task_details:
+            text += f"\n\n📝 <b>Детали:</b>\n{task_details}"
+
         await bot.send_message(
             chat_id=user_id,
-            text=f"🔔 <b>Напоминание:</b>\n{task_text}",
+            text=text,
             parse_mode="HTML",
             reply_markup=get_main_kb()
         )
@@ -43,7 +47,7 @@ async def init_scheduler(bot: Bot):
         # Запрашиваем только невыполненные задачи с Telegram ID пользователя
         async with db.execute(
             """
-            SELECT tasks.id, users.tg_id, tasks.content, tasks.time 
+            SELECT tasks.id, users.tg_id, tasks.content, tasks.details, tasks.time 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
             WHERE tasks.status = 0
@@ -69,6 +73,7 @@ async def init_scheduler(bot: Bot):
                         'bot': bot,
                         'user_id': task['tg_id'],  # Передаем tg_id
                         'task_text': task['content'],
+                        'task_details': task['details'],  # Передаем details
                         'task_id': task['id'],  # <-- Передаем ID задачи
                     },
                     id=f"task_{task['id']}",
