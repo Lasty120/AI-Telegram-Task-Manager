@@ -70,3 +70,36 @@ async def complete_task(db: aiosqlite.Connection, task_id: int):
         (TaskStatus.COMPLETED.value, task_id)  # статус станет 1
     )
     await db.commit()
+
+
+async def get_task_by_id(db: aiosqlite.Connection, task_id: int) -> aiosqlite.Row | None:
+    async with db.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)) as cursor:
+        return await cursor.fetchone()
+
+
+async def update_task(
+    db: aiosqlite.Connection,
+    task_id: int,
+    content: str = None,
+    details: str = None,
+    time_val: int = None
+):
+    updates = []
+    params = []
+    if content is not None:
+        updates.append("content = ?")
+        params.append(content)
+    if details is not None:
+        updates.append("details = ?")
+        params.append(details)
+    if time_val is not None:
+        updates.append("time = ?")
+        params.append(time_val)
+        
+    if not updates:
+        return
+        
+    params.append(task_id)
+    query = f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?"
+    await db.execute(query, tuple(params))
+    await db.commit()

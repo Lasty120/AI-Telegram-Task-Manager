@@ -3,7 +3,7 @@ from aiogram.types import Message
 from aiosqlite import Connection, Row
 
 from services.ai_service import parse_user_text
-from services.task_actions import handle_create_task
+from services.task_actions import handle_create_task, handle_update_task
 from database.crud.task import get_user_tasks
 
 router = Router()
@@ -41,7 +41,7 @@ async def process_task_handler(
             await handle_create_task(db=db, user=user, command=task_cmd, message=message)
 
         elif task_cmd.action == "update":
-            await message.answer(f"🔄 Изменяю задачу '{task_cmd.content}'... (В разработке)")
+            await handle_update_task(db=db, user=user, command=task_cmd, message=message)
 
         elif task_cmd.action == "delete":
             await message.answer(f"🗑 Удаляю задачу '{task_cmd.content}'... (В разработке)")
