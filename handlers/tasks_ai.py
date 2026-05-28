@@ -46,6 +46,9 @@ async def process_task_handler(
         elif task_cmd.action == "update":
             await action_service.update(command=task_cmd, message=message)
 
+        elif task_cmd.action == "forbidden":
+            await message.answer(f"⚠️ Ошибка: {task_cmd.content or 'Действие не может быть выполнено (возможно, указана дата в прошлом).'}")
+
         elif task_cmd.action == "delete":
             await message.answer(f"🗑 Удаляю задачу '{task_cmd.content}'... (В разработке)")
 

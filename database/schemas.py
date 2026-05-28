@@ -3,9 +3,9 @@ from typing import Optional, Literal, List
 
 
 class TaskActionSchema(BaseModel):
-    action: Literal["create", "update", "delete", "unknown"] = Field(
+    action: Literal["create", "update", "delete", "forbidden", "unknown"] = Field(
         ...,
-        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete) или непонятно (unknown)"
+        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete), запрещено (forbidden) или непонятно (unknown)"
     )
     content: Optional[str] = Field(None, description="Короткое название задачи, например 'Встреча с Тинькофф'")
     details: Optional[str] = Field(None, description="Подробное описание, перевод слова или дополнительные примечания к задаче")
