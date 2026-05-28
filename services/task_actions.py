@@ -5,7 +5,7 @@ from aiogram.types import Message
 from aiosqlite import Connection, Row
 
 from database.schemas import TaskActionSchema
-from database.crud.task import create_task, get_task_by_id, update_task
+from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task
 from reply_keyboards import get_main_kb
 from services.scheduler import scheduler, send_task_notification
 
@@ -151,11 +151,7 @@ class TaskActionsService:
             return
 
         # Запрашиваем найденные задачи из БД
-        placeholders = ', '.join('?' for _ in command.task_ids)
-        query = f"SELECT * FROM tasks WHERE id IN ({placeholders}) AND user_id = ? ORDER BY time ASC"
-        
-        async with self.db.execute(query, (*command.task_ids, self.user['id'])) as cursor:
-            tasks = await cursor.fetchall()
+        tasks = await get_tasks_by_ids(db=self.db, task_ids=command.task_ids, user_id=self.user["id"])
 
         if not tasks:
             await message.answer("🔍 Задачи не найдены или у вас нет к ним доступа.")
@@ -171,3 +167,32 @@ class TaskActionsService:
             response_lines.append(task_line)
 
         await message.answer("\n".join(response_lines), parse_mode='Markdown', reply_markup=get_main_kb())
+
+
+    async def delete(self, command: TaskActionSchema, message: Message):
+        if not command.task_id:
+            await message.answer("⚠️ Не удалось определить, какую именно задачу нужно завершить.")
+            return
+
+        # 1. Получаем задачу из базы данных
+        task = await get_task_by_id(self.db, command.task_id)
+        if not task:
+            await message.answer("⚠️ Задача с таким ID не найдена.")
+            return
+
+        # Проверяем права: принадлежит ли задача текущему пользователю
+        if task['user_id'] != self.user['id']:
+            await message.answer("⚠️ У вас нет прав на завершение этой задачи.")
+            return
+
+        # 2. Помечаем задачу как выполненную (status = 1)
+        await complete_task(self.db, command.task_id)
+
+        # 3. Удаляем из планировщика
+        try:
+            scheduler.remove_job(f"task_{command.task_id}")
+        except Exception:
+            pass
+
+        confirm_text = f"✅ Задача выполнена: *{task['content']}*"
+        await message.answer(confirm_text, parse_mode='Markdown', reply_markup=get_main_kb())

@@ -77,6 +77,19 @@ async def get_task_by_id(db: aiosqlite.Connection, task_id: int) -> aiosqlite.Ro
         return await cursor.fetchone()
 
 
+async def get_tasks_by_ids(
+        db: aiosqlite.Connection,
+        task_ids: list[int],
+        user_id: int
+) -> list[aiosqlite.Row]:
+        placeholders = ', '.join('?' for _ in task_ids)
+        query = f"SELECT * FROM tasks WHERE id IN ({placeholders}) AND user_id = ? ORDER BY time ASC"
+
+        async with db.execute(query, (*task_ids, user_id)) as cursor:
+            tasks = await cursor.fetchall()
+        return tasks
+
+
 async def update_task(
     db: aiosqlite.Connection,
     task_id: int,
