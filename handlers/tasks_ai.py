@@ -3,7 +3,7 @@ from aiogram.types import Message
 from aiosqlite import Connection, Row
 
 from services.ai_service import parse_user_text
-from services.task_actions import handle_create_task, handle_update_task
+from services.task_actions import TaskActionsService
 from database.crud.task import get_user_tasks
 
 router = Router()
@@ -35,13 +35,16 @@ async def process_task_handler(
         await message.answer("🤷‍♂️ Не нашёл никаких задач в вашем сообщении. Попробуйте написать иначе.")
         return
 
+    # Инициализируем сервисный класс для обработки задач
+    action_service = TaskActionsService(db=db, user=user, bot=message.bot)
+
     # Обрабатываем каждую распознанную задачу по очереди
     for task_cmd in tasks:
         if task_cmd.action == "create":
-            await handle_create_task(db=db, user=user, command=task_cmd, message=message)
+            await action_service.create(command=task_cmd, message=message)
 
         elif task_cmd.action == "update":
-            await handle_update_task(db=db, user=user, command=task_cmd, message=message)
+            await action_service.update(command=task_cmd, message=message)
 
         elif task_cmd.action == "delete":
             await message.answer(f"🗑 Удаляю задачу '{task_cmd.content}'... (В разработке)")
