@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 import pytz
 from aiogram import Bot
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup
 from aiosqlite import Connection, Row
 
 from database.schemas import TaskActionSchema
 from database.crud.task import create_task
+from reply_keyboards import get_main_kb
 from services.scheduler import scheduler, send_task_notification
 
 
@@ -58,4 +59,4 @@ async def handle_create_task(
         replace_existing=True
     )
 
-    await message.answer(f"✅ Создана задача: {command.content} на {display_time}")
+    await message.answer(f"✅ Создана задача: {command.content} на {display_time}", reply_markup=get_main_kb())

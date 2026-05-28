@@ -1,3 +1,4 @@
+from asyncio import timeout
 from datetime import datetime
 import aiosqlite
 import pytz
@@ -6,23 +7,32 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
+from reply_keyboards import get_main_kb
+from database.crud.task import complete_task
+from config import DB_PATH as db_path
+
 # Создаем глобальный инстанс планировщика
 scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
 
 
-async def send_task_notification(bot: Bot, user_id: int, task_text: str):
+async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int):
     """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
         await bot.send_message(
             chat_id=user_id,
             text=f"🔔 <b>Напоминание:</b>\n{task_text}",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=get_main_kb()
         )
+        async with aiosqlite.connect(db_path, timeout=10.0) as db:
+            from database.crud.task import complete_task
+            await complete_task(db, task_id)
+            logging.info(f"Задача {task_id} успешно отмечена как выполненная.")
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 
 
-async def init_scheduler(bot: Bot, db_path: str):
+async def init_scheduler(bot: Bot):
     """Полная сборка планировщика: подключаемся к БД, забиваем задачи в очередь и стартуем"""
     tz = pytz.timezone("Asia/Almaty")
 
@@ -58,7 +68,8 @@ async def init_scheduler(bot: Bot, db_path: str):
                     kwargs={
                         'bot': bot,
                         'user_id': task['tg_id'],  # Передаем tg_id
-                        'task_text': task['content']
+                        'task_text': task['content'],
+                        'task_id': task['id'],  # <-- Передаем ID задачи
                     },
                     id=f"task_{task['id']}",
                     replace_existing=True,

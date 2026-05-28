@@ -20,6 +20,8 @@ class UserMiddleware(BaseMiddleware):
 
         db: aiosqlite.Connection = data["db"]
         tg_user = data["event_from_user"]
+        if not tg_user:
+            return await handler(event, data)
 
         # Передаем соединение db в твою CRUD функцию
         user = await get_or_create_user(

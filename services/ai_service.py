@@ -29,6 +29,7 @@ async def parse_user_text(user_text: str) -> MultiTaskActionSchema | str:
         )
 
         ai_text = response.choices[0].message.content
+        print(ai_text)
         return MultiTaskActionSchema.model_validate_json(ai_text)
 
     except ValidationError as ve:

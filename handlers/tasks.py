@@ -7,23 +7,22 @@ import re
 from datetime import datetime
 from aiosqlite import Connection, Row
 
-from keyboards import get_task_keyboard
+from inline_keyboards import get_task_keyboard
 from database.crud.task import create_task, get_user_tasks, get_next_task
 
 router = Router()
 
 
-@router.callback_query(F.data == "my_tasks")
+@router.message(F.text == "Мои задачи")
 async def get_my_tasks_handler(
-        callback: CallbackQuery,
+        message: Message,
         db: Connection,
         user: Row
 ):
     tasks = await get_user_tasks(db, user["id"])
     # 2. Если задач нет
     if not tasks:
-        await callback.message.answer("У вас пока нет запланированных задач. Используйте /create_task")
-        await callback.answer()  # Обязательно гасим "часики" на кнопке
+        await message.answer("У вас пока нет запланированных задач. Используйте /create_task")
         return
 
     # 3. Если задачи есть, красиво их форматируем
@@ -40,10 +39,7 @@ async def get_my_tasks_handler(
     response_text = "\n".join(response_lines)
 
     # 4. Отправляем пользователю
-    await callback.message.edit_text(response_text, parse_mode='Markdown')
-
-    # 5. Уведомляем Telegram, что инлайн-кнопка успешно обработана
-    await callback.answer()
+    await message.answer(response_text, parse_mode='Markdown')
 
 
 @router.message(Command('next_task'))
