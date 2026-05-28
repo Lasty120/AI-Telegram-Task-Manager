@@ -143,3 +143,31 @@ class TaskActionsService:
         if new_details:
             confirm_text += f"\n📖 Детали: {new_details}"
         await message.answer(confirm_text, reply_markup=get_main_kb())
+
+
+    async def select(self, command: TaskActionSchema, message: Message):
+        if not command.task_ids:
+            await message.answer("🔍 По вашему запросу ничего не найдено.")
+            return
+
+        # Запрашиваем найденные задачи из БД
+        placeholders = ', '.join('?' for _ in command.task_ids)
+        query = f"SELECT * FROM tasks WHERE id IN ({placeholders}) AND user_id = ? ORDER BY time ASC"
+        
+        async with self.db.execute(query, (*command.task_ids, self.user['id'])) as cursor:
+            tasks = await cursor.fetchall()
+
+        if not tasks:
+            await message.answer("🔍 Задачи не найдены или у вас нет к ним доступа.")
+            return
+
+        response_lines = [f"🔍 *Результаты поиска по запросу '{command.content or 'поиск'}':*", ""]
+        for index, task in enumerate(tasks, 1):
+            task_datetime = datetime.fromtimestamp(task['time'], self.tz)
+            formatted_time = task_datetime.strftime('%d.%m %H:%M')
+            task_line = f"{index}. *{task['content']}* — ⏰ {formatted_time}"
+            if task['details']:
+                task_line += f"\n   _{task['details']}_"
+            response_lines.append(task_line)
+
+        await message.answer("\n".join(response_lines), parse_mode='Markdown', reply_markup=get_main_kb())
