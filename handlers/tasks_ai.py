@@ -4,6 +4,7 @@ from aiosqlite import Connection, Row
 
 from services.ai_service import parse_user_text
 from services.task_actions import handle_create_task
+from database.crud.task import get_user_tasks
 
 router = Router()
 
@@ -16,8 +17,11 @@ async def process_task_handler(
 ):
     waiting_msg = await message.answer("🧠 Думаю...")
 
+    # Получаем текущие задачи пользователя
+    user_tasks = await get_user_tasks(db, user["id"])
+
     # Отправляем текст в ИИ
-    parsed_command = await parse_user_text(message.text)
+    parsed_command = await parse_user_text(message.text, user_tasks)
 
     await waiting_msg.delete()
 
