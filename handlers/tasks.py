@@ -8,7 +8,7 @@ from datetime import datetime
 from aiosqlite import Connection, Row
 
 from inline_keyboards import get_task_keyboard
-from database.crud.task import create_task, get_user_tasks, get_next_task, get_user_completed_tasks
+from database.crud.task import create_task, get_user_tasks, get_user_completed_tasks
 from utils.formatters import format_tasks_message
 
 router = Router()

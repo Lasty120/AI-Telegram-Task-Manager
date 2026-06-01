@@ -41,26 +41,6 @@ async def get_user_completed_tasks(db: aiosqlite.Connection, user_id: int) -> li
         return await cursor.fetchall()
 
 
-async def get_next_task(db: aiosqlite.Connection, user_id: int) -> aiosqlite.Row | None:
-    """
-    Возвращает самую ближайшую предстоящую активную задачу пользователя.
-    Если задач на будущее нет, возвращает None.
-    """
-    current_now = int(time.time())  # Текущее время в UNIX timestamp
-
-    async with db.execute(
-            """
-            SELECT *
-            FROM tasks
-            WHERE user_id = ? AND status = ? AND time > ?
-            ORDER BY time ASC
-            LIMIT 1
-            """,
-            (user_id, TaskStatus.ACTIVE.value, current_now)
-    ) as cursor:
-        return await cursor.fetchone()
-
-
 async def get_due_tasks(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
     current_time = int(time.time())
     async with db.execute(
