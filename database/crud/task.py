@@ -30,6 +30,17 @@ async def get_user_tasks(db: aiosqlite.Connection, user_id: int) -> list[aiosqli
         return await cursor.fetchall()
 
 
+async def get_user_completed_tasks(db: aiosqlite.Connection, user_id: int) -> list[aiosqlite.Row]:
+    """
+    Получает все выполненные задачи конкретного пользователя, отсортированные по времени.
+    """
+    async with db.execute(
+        "SELECT * FROM tasks WHERE user_id = ? AND status = ? ORDER BY time ASC",
+        (user_id, TaskStatus.COMPLETED.value)
+    ) as cursor:
+        return await cursor.fetchall()
+
+
 async def get_next_task(db: aiosqlite.Connection, user_id: int) -> aiosqlite.Row | None:
     """
     Возвращает самую ближайшую предстоящую активную задачу пользователя.
