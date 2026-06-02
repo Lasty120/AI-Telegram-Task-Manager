@@ -71,7 +71,7 @@ class TaskMessages:
 
     @staticmethod
     def task_completed(content: str) -> str:
-        return f"✅ Задача выполнена: *{content}*"
+        return f"✅ Задача выполнена:\n *{content}*"
 
     # Scheduler notification (scheduler.py)
     @staticmethod
@@ -79,6 +79,11 @@ class TaskMessages:
         text = f"🔔 <b>Напоминание:</b>\n{content}"
         if details:
             text += f"\n\n📝 <b>Детали:</b>\n{details}"
+        return text
+
+    @staticmethod
+    def task_delay(new_dt: str) -> str:
+        text = f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})"
         return text
 
 

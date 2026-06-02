@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
 from reply_keyboards import get_main_kb
-from database.crud.task import complete_task
+from inline_keyboards import get_task_action_keyboard
 from config import DB_PATH
 
 # Создаем глобальный инстанс планировщика
@@ -26,12 +26,8 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
             chat_id=user_id,
             text=text,
             parse_mode="HTML",
-            reply_markup=get_main_kb()
+            reply_markup=get_task_action_keyboard(task_id)
         )
-        async with aiosqlite.connect(DB_PATH, timeout=10.0) as db:
-            from database.crud.task import complete_task
-            await complete_task(db, task_id)
-            logging.info(f"Задача {task_id} успешно отмечена как выполненная.")
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 

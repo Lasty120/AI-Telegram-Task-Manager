@@ -4,6 +4,7 @@ from handlers.start import router as start_router
 from handlers.tasks import router as task_router
 from handlers.tasks_ai import router as task_ai_router
 from handlers.voice_transcriptor import router as voice_transcriptor_router
+from handlers.notifications import router as notifications_router
 
 
 def get_handlers_router() -> Router:
@@ -14,5 +15,6 @@ def get_handlers_router() -> Router:
     router.include_router(task_router)
     router.include_router(task_ai_router)
     router.include_router(voice_transcriptor_router)
+    router.include_router(notifications_router)
 
     return router
