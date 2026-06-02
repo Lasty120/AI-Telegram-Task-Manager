@@ -30,7 +30,7 @@ async def get_my_tasks_handler(
     )
 
     # 4. Отправляем пользователю
-    await message.answer(response_text, parse_mode='Markdown')
+    await message.answer(response_text, parse_mode='HTML')
 
 
 @router.message(F.text == "Мои выполненные задачи")
@@ -49,4 +49,4 @@ async def get_my_completed_tasks_handler(
     )
 
     # 4. Отправляем пользователю
-    await message.answer(response_text, parse_mode='Markdown')
+    await message.answer(response_text, parse_mode='HTML')

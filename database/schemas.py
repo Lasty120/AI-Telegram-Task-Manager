@@ -13,6 +13,7 @@ class TaskActionSchema(BaseModel):
     time: Optional[str] = Field(None, description="Когда напомнить? Формат YYYY-MM-DD HH:MM. Если время не указано, оставь null")
     task_id: Optional[int] = Field(None, description="ID задачи, если юзер просит изменить или удалить конкретную")
     task_ids: Optional[List[int]] = Field(None, description="Список ID задач, выбранных для действия select")
+    duration: Optional[int] = Field(None, description="Ориентировочная продолжительность задачи в минутах")
 
 
 class MultiTaskActionSchema(BaseModel):

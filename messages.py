@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 
 class StartMessages:
@@ -23,15 +23,17 @@ class StartMessages:
 class TaskMessages:
     # Task listing (handlers/tasks.py)
     TASKS_EMPTY = "У вас пока нет запланированных задач. Используйте /create_task"
-    TASKS_HEADER = "Ваш список задач"
+    TASKS_HEADER = "<b>Ваш список задач:</b>"
     COMPLETED_TASKS_EMPTY = "У вас пока нет выполненных задач. Используйте /create_task"
-    COMPLETED_TASKS_HEADER = "Ваш список выполненных задач:"
+    COMPLETED_TASKS_HEADER = "<b>Ваш список выполненных задач:</b>"
     # Task creation (actions.py)
     INVALID_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ"
 
     @staticmethod
-    def task_created(content: str, display_time: str, details: str = None) -> str:
+    def task_created(content: str, display_time: str, details: str = None, duration: int = None) -> str:
         text = f"✅ Создана задача: {content} на {display_time}"
+        if duration:
+            text += f" (длительность: {duration} мин)"
         if details:
             text += f"\n📖 Детали: {details}"
         return text
@@ -43,8 +45,10 @@ class TaskMessages:
     INVALID_UPDATE_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ при обновлении."
 
     @staticmethod
-    def task_updated(content: str, display_time: str, details: str = None) -> str:
+    def task_updated(content: str, display_time: str, details: str = None, duration: int = None) -> str:
         text = f"🔄 Задача обновлена: {content} на {display_time}"
+        if duration:
+            text += f" (длительность: {duration} мин)"
         if details:
             text += f"\n📖 Детали: {details}"
         return text
@@ -59,7 +63,10 @@ class TaskMessages:
         for index, task in enumerate(tasks, 1):
             task_datetime = datetime.fromtimestamp(task['time'], tz)
             formatted_time = task_datetime.strftime('%d.%m %H:%M')
-            task_line = f"{index}. *{task['content']}* — ⏰ {formatted_time}"
+            task_line = f"{index}. *{task['content']}*"
+            if 'duration' in task.keys() and task['duration']:
+                task_line += f" ({task['duration']} мин)"
+            task_line += f" — ⏰ {formatted_time}"
             if task['details']:
                 task_line += f"\n   _{task['details']}_"
             response_lines.append(task_line)

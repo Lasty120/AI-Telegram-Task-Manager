@@ -14,7 +14,10 @@ def format_tasks_message(tasks: list, empty_text: str, header_text: str) -> str:
         # Форматируем в строку
         formatted_time = task_datetime.strftime('%d.%m %H:%M')
 
-        task_line = f"{index}. *{task['content']}* — ⏰ {formatted_time}"
+        task_line = f"{index}. *{task['content']}*"
+        if 'duration' in task.keys() and task['duration']:
+            task_line += f" ({task['duration']} мин)"
+        task_line += f" — ⏰ {formatted_time}"
 
         # Используем .get() для безопасности, если структура task это позволяет
         if task['details']:

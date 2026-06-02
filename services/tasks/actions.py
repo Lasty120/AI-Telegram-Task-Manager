@@ -45,6 +45,7 @@ class TaskActionsService:
             time=task_timestamp,
             content=command.content,
             details=command.details,
+            duration=command.duration,
         )
 
         # 2. Добавляем в планировщик на лету
@@ -66,7 +67,8 @@ class TaskActionsService:
         confirm_text = TaskMessages.task_created(
             content=command.content,
             display_time=display_time,
-            details=command.details
+            details=command.details,
+            duration=command.duration
         )
         await message.answer(confirm_text, reply_markup=get_main_kb())
 
@@ -109,13 +111,17 @@ class TaskActionsService:
         else:
             localized_dt = datetime.fromtimestamp(new_time_timestamp, self.tz)
 
+        # Длительность
+        new_duration = command.duration if command.duration is not None else (task['duration'] if 'duration' in task.keys() else None)
+
         # 3. Сохраняем изменения в БД
         await update_task(
             db=self.db,
             task_id=command.task_id,
             content=new_content,
             details=new_details,
-            time_val=new_time_timestamp
+            time_val=new_time_timestamp,
+            duration=new_duration
         )
 
         # 4. Обновляем планировщик
@@ -146,7 +152,8 @@ class TaskActionsService:
         confirm_text = TaskMessages.task_updated(
             content=new_content,
             display_time=display_time,
-            details=new_details
+            details=new_details,
+            duration=new_duration
         )
         await message.answer(confirm_text, reply_markup=get_main_kb())
 
