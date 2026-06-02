@@ -1,7 +1,9 @@
 from openai import AsyncOpenAI
 from pydantic import ValidationError
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+
+import re
 
 from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL
 from database.schemas import MultiTaskActionSchema
@@ -25,14 +27,26 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
             try:
                 task_time = datetime.fromtimestamp(task['time'], tz)
                 formatted_time = task_time.strftime("%Y-%m-%d %H:%M")
+                
+                # Рассчитываем ends_at
+                duration = task["duration"] if "duration" in task.keys() else None
+                if duration:
+                    ends_at_time = task_time + timedelta(minutes=duration)
+                    formatted_ends_at = ends_at_time.strftime("%Y-%m-%d %H:%M")
+                else:
+                    formatted_ends_at = None
             except Exception:
                 formatted_time = None
+                formatted_ends_at = None
+                duration = None
+                
             tasks_list.append({
                 "task_id": task["id"],
                 "content": task["content"],
                 "details": task["details"],
                 "time": formatted_time,
-                "duration": task["duration"] if "duration" in task.keys() else None
+                "duration": duration,
+                "ends_at": formatted_ends_at
             })
     tasks_json = json.dumps(tasks_list, ensure_ascii=False, indent=2)
     system_prompt += f"\n\n<user tasks>\n{tasks_json}\n</user tasks>"
@@ -44,13 +58,24 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}
             ],
-            temperature=0.1,  # Делаем ИИ максимально "сухим" и точным
+            temperature=0.0,  # Ставим 0.0 для максимальной детерминированности
             response_format={"type": "json_object"}
         )
 
         ai_text = response.choices[0].message.content
-        print(ai_text)
-        return MultiTaskActionSchema.model_validate_json(ai_text)
+        print(f"Сырой ответ ИИ:\n{ai_text}") # Оставь для дебага
+
+        # 🛠 ОЧИСТКА МУСОРА: Удаляем Markdown-обертки (```json ... ```)
+        # и лишние символы до первого { и после последнего }
+        clean_json = re.sub(r"^```[a-zA-Z]*\n|```$", "", ai_text.strip(), flags=re.MULTILINE)
+
+        # На случай, если модель все равно вставила текст до/после JSON
+        start_idx = clean_json.find('{')
+        end_idx = clean_json.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            clean_json = clean_json[start_idx:end_idx+1]
+
+        return MultiTaskActionSchema.model_validate_json(clean_json)
 
     except ValidationError as ve:
         return f"❌ Ошибка парсинга: {ve}"
