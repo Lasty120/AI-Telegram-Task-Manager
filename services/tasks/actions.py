@@ -4,6 +4,8 @@ from aiogram import Bot
 from aiogram.types import Message
 from aiosqlite import Connection, Row
 
+from messages import TaskMessages
+
 from database.schemas import TaskActionSchema
 from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task
 from reply_keyboards import get_main_kb
@@ -33,7 +35,7 @@ class TaskActionsService:
                 task_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer("⚠️ Некорректный формат времени от ИИ")
+                await message.answer(TaskMessages.INVALID_TIME_FORMAT)
                 return
 
         # 1. Сохраняем в БД и получаем ID новой задачи
@@ -61,25 +63,27 @@ class TaskActionsService:
             replace_existing=True
         )
 
-        confirm_text = f"✅ Создана задача: {command.content} на {display_time}"
-        if command.details:
-            confirm_text += f"\n📖 Детали: {command.details}"
+        confirm_text = TaskMessages.task_created(
+            content=command.content,
+            display_time=display_time,
+            details=command.details
+        )
         await message.answer(confirm_text, reply_markup=get_main_kb())
 
     async def update(self, command: TaskActionSchema, message: Message):
         if not command.task_id:
-            await message.answer("⚠️ Не удалось определить, какую именно задачу нужно изменить.")
+            await message.answer(TaskMessages.TASK_UPDATE_ID_MISSING)
             return
 
         # 1. Получаем задачу из базы данных
         task = await get_task_by_id(self.db, command.task_id)
         if not task:
-            await message.answer("⚠️ Задача с таким ID не найдена.")
+            await message.answer(TaskMessages.TASK_NOT_FOUND)
             return
 
         # Проверяем права: принадлежит ли задача текущему пользователю
         if task['user_id'] != self.user['id']:
-            await message.answer("⚠️ У вас нет прав на редактирование этой задачи.")
+            await message.answer(TaskMessages.TASK_UPDATE_ACCESS_DENIED)
             return
 
         # 2. Определяем обновленные значения
@@ -100,7 +104,7 @@ class TaskActionsService:
                 new_time_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer("⚠️ Некорректный формат времени от ИИ при обновлении.")
+                await message.answer(TaskMessages.INVALID_UPDATE_TIME_FORMAT)
                 return
         else:
             localized_dt = datetime.fromtimestamp(new_time_timestamp, self.tz)
@@ -139,50 +143,48 @@ class TaskActionsService:
             except Exception:
                 pass
 
-        confirm_text = f"🔄 Задача обновлена: {new_content} на {display_time}"
-        if new_details:
-            confirm_text += f"\n📖 Детали: {new_details}"
+        confirm_text = TaskMessages.task_updated(
+            content=new_content,
+            display_time=display_time,
+            details=new_details
+        )
         await message.answer(confirm_text, reply_markup=get_main_kb())
 
 
     async def select(self, command: TaskActionSchema, message: Message):
         if not command.task_ids:
-            await message.answer("🔍 По вашему запросу ничего не найдено.")
+            await message.answer(TaskMessages.SEARCH_EMPTY)
             return
 
         # Запрашиваем найденные задачи из БД
         tasks = await get_tasks_by_ids(db=self.db, task_ids=command.task_ids, user_id=self.user["id"])
 
         if not tasks:
-            await message.answer("🔍 Задачи не найдены или у вас нет к ним доступа.")
+            await message.answer(TaskMessages.SEARCH_NOT_FOUND)
             return
 
-        response_lines = [f"🔍 *Результаты поиска по запросу '{command.content or 'поиск'}':*", ""]
-        for index, task in enumerate(tasks, 1):
-            task_datetime = datetime.fromtimestamp(task['time'], self.tz)
-            formatted_time = task_datetime.strftime('%d.%m %H:%M')
-            task_line = f"{index}. *{task['content']}* — ⏰ {formatted_time}"
-            if task['details']:
-                task_line += f"\n   _{task['details']}_"
-            response_lines.append(task_line)
-
-        await message.answer("\n".join(response_lines), parse_mode='Markdown', reply_markup=get_main_kb())
+        response_text = TaskMessages.search_results(
+            query=command.content or "поиск",
+            tasks=tasks,
+            tz=self.tz
+        )
+        await message.answer(response_text, parse_mode='Markdown', reply_markup=get_main_kb())
 
 
     async def delete(self, command: TaskActionSchema, message: Message):
         if not command.task_id:
-            await message.answer("⚠️ Не удалось определить, какую именно задачу нужно завершить.")
+            await message.answer(TaskMessages.TASK_DELETE_ID_MISSING)
             return
 
         # 1. Получаем задачу из базы данных
         task = await get_task_by_id(self.db, command.task_id)
         if not task:
-            await message.answer("⚠️ Задача с таким ID не найдена.")
+            await message.answer(TaskMessages.TASK_NOT_FOUND)
             return
 
         # Проверяем права: принадлежит ли задача текущему пользователю
         if task['user_id'] != self.user['id']:
-            await message.answer("⚠️ У вас нет прав на завершение этой задачи.")
+            await message.answer(TaskMessages.TASK_DELETE_ACCESS_DENIED)
             return
 
         # 2. Помечаем задачу как выполненную (status = 1)
@@ -194,5 +196,5 @@ class TaskActionsService:
         except Exception:
             pass
 
-        confirm_text = f"✅ Задача выполнена: *{task['content']}*"
+        confirm_text = TaskMessages.task_completed(task['content'])
         await message.answer(confirm_text, parse_mode='Markdown', reply_markup=get_main_kb())

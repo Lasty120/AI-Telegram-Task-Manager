@@ -1,6 +1,8 @@
 ﻿from aiogram import F, Router, Bot
 from aiogram.types import Audio, Message
 
+from messages import AiMessages
+
 from aiosqlite import Connection, Row
 
 from aiofiles.os import remove, path as aio_path
@@ -18,7 +20,7 @@ async def handle_voice_message(
         db: Connection,
 ):
     # Даем пользователю понять, что бот принял задачу
-    waiting_msg = await message.answer("⏳ Слушаю...")
+    waiting_msg = await message.answer(AiMessages.LISTENING)
 
     # Получаем ID файла и формируем локальное имя файла
     file_id = message.voice.file_id
@@ -44,7 +46,7 @@ async def handle_voice_message(
         )
 
     except Exception as e:
-        await waiting_msg.edit_text("❌ Произошла ошибка при расшифровке аудио.")
+        await waiting_msg.edit_text(AiMessages.TRANSCRIPTION_ERROR)
         print(f"Ошибка транскрибации: {e}")
 
     finally:
