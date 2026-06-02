@@ -1,4 +1,5 @@
 from datetime import datetime
+from aiogram.utils.markdown import html_decoration as hd
 
 
 class StartMessages:
@@ -29,13 +30,19 @@ class TaskMessages:
     # Task creation (actions.py)
     INVALID_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ"
 
+    # Alert constants for notifications.py
+    TASK_COMPLETED_SUCCESS = "✅ Задача успешно выполнена!"
+    TASK_DELAYED_SUCCESS = "⏰ Задача отложена на 15 минут!"
+
     @staticmethod
     def task_created(content: str, display_time: str, details: str = None, duration: int = None) -> str:
-        text = f"✅ Создана задача: {content} на {display_time}"
+        escaped_content = hd.quote(content)
+        text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}"
         if duration:
             text += f" (длительность: {duration} мин)"
         if details:
-            text += f"\n📖 Детали: {details}"
+            escaped_details = hd.quote(details)
+            text += f"\n📖 Детали: <i>{escaped_details}</i>"
         return text
 
     # Task updating (actions.py)
@@ -46,11 +53,13 @@ class TaskMessages:
 
     @staticmethod
     def task_updated(content: str, display_time: str, details: str = None, duration: int = None) -> str:
-        text = f"🔄 Задача обновлена: {content} на {display_time}"
+        escaped_content = hd.quote(content)
+        text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}"
         if duration:
             text += f" (длительность: {duration} мин)"
         if details:
-            text += f"\n📖 Детали: {details}"
+            escaped_details = hd.quote(details)
+            text += f"\n📖 Детали: <i>{escaped_details}</i>"
         return text
 
     # Task selection/searching (actions.py)
@@ -59,16 +68,19 @@ class TaskMessages:
 
     @staticmethod
     def search_results(query: str, tasks: list, tz) -> str:
-        response_lines = [f"🔍 *Результаты поиска по запросу '{query}':*", ""]
+        escaped_query = hd.quote(query)
+        response_lines = [f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>", ""]
         for index, task in enumerate(tasks, 1):
             task_datetime = datetime.fromtimestamp(task['time'], tz)
             formatted_time = task_datetime.strftime('%d.%m %H:%M')
-            task_line = f"{index}. *{task['content']}*"
+            escaped_content = hd.quote(task['content'])
+            task_line = f"{index}. <b>{escaped_content}</b>"
             if 'duration' in task.keys() and task['duration']:
                 task_line += f" ({task['duration']} мин)"
             task_line += f" — ⏰ {formatted_time}"
             if task['details']:
-                task_line += f"\n   _{task['details']}_"
+                escaped_details = hd.quote(task['details'])
+                task_line += f"\n   <i>{escaped_details}</i>"
             response_lines.append(task_line)
         return "\n".join(response_lines)
 
@@ -78,21 +90,26 @@ class TaskMessages:
 
     @staticmethod
     def task_completed(content: str) -> str:
-        return f"✅ Задача выполнена:\n *{content}*"
+        escaped_content = hd.quote(content)
+        return f"✅ Задача выполнена:\n <b>{escaped_content}</b>"
 
     # Scheduler notification (scheduler.py)
     @staticmethod
     def task_notification(content: str, details: str = None) -> str:
-        text = f"🔔 <b>Напоминание:</b>\n{content}"
+        escaped_content = hd.quote(content)
+        text = f"🔔 <b>Напоминание:</b>\n{escaped_content}"
         if details:
-            text += f"\n\n📝 <b>Детали:</b>\n{details}"
+            escaped_details = hd.quote(details)
+            text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
         return text
 
     @staticmethod
     def task_end_notification(content: str, details: str = None) -> str:
-        text = f"🏁 <b>Задача завершена:</b>\n{content}"
+        escaped_content = hd.quote(content)
+        text = f"🏁 <b>Задача завершена:</b>\n{escaped_content}"
         if details:
-            text += f"\n\n📝 <b>Детали:</b>\n{details}"
+            escaped_details = hd.quote(details)
+            text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
         return text
 
     @staticmethod
@@ -109,9 +126,10 @@ class AiMessages:
 
     @staticmethod
     def execution_error(error_detail: str | None) -> str:
-        detail = error_detail or "Действие не может быть выполнено (возможно, указана дата в прошлом)."
+        detail = hd.quote(error_detail) if error_detail else "Действие не может быть выполнено (возможно, указана дата в прошлом)."
         return f"⚠️ Ошибка: {detail}"
 
     @staticmethod
     def unknown_action(content: str) -> str:
-        return f"🤷‍♂️ Не совсем понял, что нужно сделать с '{content}'."
+        escaped_content = hd.quote(content)
+        return f"🤷‍♂️ Не совсем понял, что нужно сделать с '<b>{escaped_content}</b>'."

@@ -122,7 +122,7 @@ class TaskActionsService:
             details=command.details,
             duration=command.duration
         )
-        await message.answer(confirm_text, reply_markup=get_main_kb())
+        await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
     async def update(self, command: TaskActionSchema, message: Message):
         if not command.task_id:
@@ -235,7 +235,7 @@ class TaskActionsService:
             details=new_details,
             duration=new_duration
         )
-        await message.answer(confirm_text, reply_markup=get_main_kb())
+        await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
 
     async def select(self, command: TaskActionSchema, message: Message):
@@ -255,7 +255,7 @@ class TaskActionsService:
             tasks=tasks,
             tz=self.tz
         )
-        await message.answer(response_text, parse_mode='Markdown', reply_markup=get_main_kb())
+        await message.answer(response_text, parse_mode='HTML', reply_markup=get_main_kb())
 
 
     async def delete(self, command: TaskActionSchema, message: Message):
@@ -288,4 +288,4 @@ class TaskActionsService:
             pass
 
         confirm_text = TaskMessages.task_completed(task['content'])
-        await message.answer(confirm_text, parse_mode='Markdown', reply_markup=get_main_kb())
+        await message.answer(confirm_text, parse_mode='HTML', reply_markup=get_main_kb())

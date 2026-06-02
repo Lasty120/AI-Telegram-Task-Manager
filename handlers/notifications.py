@@ -17,11 +17,11 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
     task_id = int(callback.data.split(":")[1])
     task = await get_task_by_id(db, task_id)
     if not task:
-        await callback.answer("Задача не найдена.", show_alert=True)
+        await callback.answer(TaskMessages.TASK_NOT_FOUND, show_alert=True)
         return
 
     if task['user_id'] != user['id']:
-        await callback.answer("У вас нет прав на редактирование этой задачи.", show_alert=True)
+        await callback.answer(TaskMessages.TASK_UPDATE_ACCESS_DENIED, show_alert=True)
         return
 
     await complete_task(db, task_id)
@@ -36,7 +36,7 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
     except Exception:
         pass
 
-    await callback.answer("Задача выполнена!")
+    await callback.answer(TaskMessages.TASK_COMPLETED_SUCCESS)
 
     # Обновляем текст сообщения, убирая кнопки
     text = TaskMessages.task_notification(task['content'], task['details'])
@@ -54,11 +54,11 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
     task_id = int(callback.data.split(":")[1])
     task = await get_task_by_id(db, task_id)
     if not task:
-        await callback.answer("Задача не найдена.", show_alert=True)
+        await callback.answer(TaskMessages.TASK_NOT_FOUND, show_alert=True)
         return
 
     if task['user_id'] != user['id']:
-        await callback.answer("У вас нет прав на редактирование этой задачи.", show_alert=True)
+        await callback.answer(TaskMessages.TASK_UPDATE_ACCESS_DENIED, show_alert=True)
         return
 
     tz = pytz.timezone("Asia/Almaty")
@@ -113,7 +113,7 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         except Exception:
             pass
 
-    await callback.answer("Задача отложена на 15 минут!")
+    await callback.answer(TaskMessages.TASK_DELAYED_SUCCESS)
 
     # Обновляем сообщение в чате
     text = TaskMessages.task_notification(task['content'], task['details'])
