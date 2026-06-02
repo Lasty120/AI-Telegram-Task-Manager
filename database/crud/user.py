@@ -1,4 +1,4 @@
-﻿import aiosqlite
+import aiosqlite
 
 
 async def get_or_create_user(db: aiosqlite.Connection, tg_id: int) -> aiosqlite.Row:

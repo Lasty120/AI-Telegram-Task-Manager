@@ -1,4 +1,4 @@
-﻿from aiogram import F, Router, Bot
+from aiogram import F, Router, Bot
 from aiogram.types import Audio, Message
 
 from aiosqlite import Connection, Row

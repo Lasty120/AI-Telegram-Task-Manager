@@ -43,7 +43,7 @@ async def get_my_completed_tasks_handler(
 
     response_text = format_tasks_message(
         tasks=tasks,
-        empty_text="У вас пока нет выполненных задач. Используйте /create_task",
+        empty_text="У вас пока нет выполненных задач. Напишите свою первую задачу!",
         header_text="Ваш список выполненных задач:"
     )
 

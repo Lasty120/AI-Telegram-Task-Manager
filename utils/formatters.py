@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 
 def format_tasks_message(tasks: list, empty_text: str, header_text: str) -> str:
