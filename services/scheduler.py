@@ -4,12 +4,14 @@ import aiosqlite
 import pytz
 import logging
 
+from messages import TaskMessages
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
 from reply_keyboards import get_main_kb
 from database.crud.task import complete_task
-from config import DB_PATH as db_path
+from config import DB_PATH
 
 # Создаем глобальный инстанс планировщика
 scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
@@ -18,9 +20,7 @@ scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
 async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
     """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
-        text = f"🔔 <b>Напоминание:</b>\n{task_text}"
-        if task_details:
-            text += f"\n\n📝 <b>Детали:</b>\n{task_details}"
+        text = TaskMessages.task_notification(task_text, task_details)
 
         await bot.send_message(
             chat_id=user_id,
@@ -28,7 +28,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
             parse_mode="HTML",
             reply_markup=get_main_kb()
         )
-        async with aiosqlite.connect(db_path, timeout=10.0) as db:
+        async with aiosqlite.connect(DB_PATH, timeout=10.0) as db:
             from database.crud.task import complete_task
             await complete_task(db, task_id)
             logging.info(f"Задача {task_id} успешно отмечена как выполненная.")
@@ -41,7 +41,7 @@ async def init_scheduler(bot: Bot):
     tz = pytz.timezone("Asia/Almaty")
 
     # 1. Открываем короткое соединение с БД только ради вычитки активных задач
-    async with aiosqlite.connect(db_path) as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
 
         # Запрашиваем только невыполненные задачи с Telegram ID пользователя

@@ -2,11 +2,13 @@ from services.ai.service import parse_user_text
 from services.tasks.actions import TaskActionsService
 from database.crud.task import get_user_tasks
 
+from messages import AiMessages
+
 async def process_task_command(text: str, message, user, db):
     """
     Универсальная функция обработки текстовых команд (введенных вручную или расшифрованных из аудио).
     """
-    waiting_msg = await message.answer("🧠 Думаю...")
+    waiting_msg = await message.answer(AiMessages.THINKING)
 
     # Получаем текущие задачи пользователя
     user_tasks = await get_user_tasks(db, user["id"])
@@ -23,7 +25,7 @@ async def process_task_command(text: str, message, user, db):
     tasks = parsed_command.tasks
 
     if not tasks:
-        await message.answer("🤷‍♂️ Не нашёл никаких задач в вашем сообщении. Попробуйте написать иначе.")
+        await message.answer(AiMessages.NO_TASKS_FOUND)
         return
 
     # Инициализируем сервисный класс для обработки задач
@@ -41,10 +43,10 @@ async def process_task_command(text: str, message, user, db):
             await action_service.select(command=task_cmd, message=message)
 
         elif task_cmd.action == "forbidden":
-            await message.answer(f"⚠️ Ошибка: {task_cmd.content or 'Действие не может быть выполнено (возможно, указана дата в прошлом).'}")
+            await message.answer(AiMessages.execution_error(task_cmd.content))
 
         elif task_cmd.action == "delete":
             await action_service.delete(command=task_cmd, message=message)
 
         else:
-            await message.answer(f"🤷‍♂️ Не совсем понял, что нужно сделать с '{task_cmd.content or text}'.")
+            await message.answer(AiMessages.unknown_action(task_cmd.content or text))
