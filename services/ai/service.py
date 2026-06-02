@@ -5,7 +5,7 @@ import pytz
 
 from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL
 from database.schemas import MultiTaskActionSchema
-from services.prompts import get_system_prompt
+from services.ai.prompts import get_system_prompt
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
