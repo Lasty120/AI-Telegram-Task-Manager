@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import pytz
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
@@ -8,6 +7,7 @@ from aiosqlite import Connection, Row
 from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
+from config import TIMEZONE
 
 router = Router()
 
@@ -61,8 +61,7 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         await callback.answer(TaskMessages.TASK_UPDATE_ACCESS_DENIED, show_alert=True)
         return
 
-    tz = pytz.timezone("Asia/Almaty")
-    now = datetime.now(tz)
+    now = datetime.now(TIMEZONE)
     new_time_dt = now + timedelta(minutes=15)
     new_time_timestamp = int(new_time_dt.timestamp())
 

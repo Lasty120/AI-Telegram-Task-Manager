@@ -1,5 +1,6 @@
 from os import getenv
 from dotenv import load_dotenv
+import pytz
 
 load_dotenv()
 
@@ -9,5 +10,8 @@ OPENAI_DEFAULT_MODEL = getenv("GOOGLE_DEFAULT_MODEL")
 OPENAI_DEFAULT_URL = getenv("GOOGLE_DEFAULT_URL")
 DB_PATH = "bot.db"
 GROQ_API_KEY = getenv("GROQ_API_KEY")
+
+TIMEZONE_STR = getenv("TIMEZONE", "Asia/Almaty")
+TIMEZONE = pytz.timezone(TIMEZONE_STR)
 
 

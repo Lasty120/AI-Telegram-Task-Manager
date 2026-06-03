@@ -5,7 +5,7 @@ import pytz
 
 import re
 
-from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL
+from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL, TIMEZONE
 from database.schemas import MultiTaskActionSchema
 from services.ai.prompts import get_system_prompt
 
@@ -14,7 +14,7 @@ client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
 async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskActionSchema | str:
     # ИИ обязан знать текущее время, чтобы правильно рассчитать даты
-    tz = pytz.timezone('Asia/Almaty')  # Замени на нужный
+    tz = TIMEZONE
     current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
     system_prompt = get_system_prompt(current_time)

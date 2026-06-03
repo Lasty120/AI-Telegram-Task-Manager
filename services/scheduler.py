@@ -10,10 +10,10 @@ from aiogram import Bot
 
 from reply_keyboards import get_main_kb
 from inline_keyboards import get_task_action_keyboard
-from config import DB_PATH
+from config import DB_PATH, TIMEZONE
 
 # Создаем глобальный инстанс планировщика
-scheduler = AsyncIOScheduler(timezone="Asia/Almaty")
+scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 
 async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
@@ -48,7 +48,7 @@ async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, tas
 
 async def init_scheduler(bot: Bot):
     """Полная сборка планировщика: подключаемся к БД, забиваем задачи в очередь и стартуем"""
-    tz = pytz.timezone("Asia/Almaty")
+    tz = TIMEZONE
 
     # 1. Открываем короткое соединение с БД только ради вычитки активных задач
     async with aiosqlite.connect(DB_PATH) as db:

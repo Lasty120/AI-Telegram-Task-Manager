@@ -6,10 +6,13 @@ from aiosqlite import Connection, Row
 
 from messages import TaskMessages
 
+from apscheduler.jobstores.base import JobLookupError
+
 from database.schemas import TaskActionSchema
 from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, get_user_tasks
 from reply_keyboards import get_main_kb
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
+from config import TIMEZONE
 
 
 class TaskActionsService:
@@ -17,7 +20,59 @@ class TaskActionsService:
         self.db = db
         self.user = user
         self.bot = bot
-        self.tz = pytz.timezone('Asia/Almaty')
+        self.tz = TIMEZONE
+
+
+    @staticmethod
+    def _safe_remove_job(job_id: str):
+        """Вспомогательный метод для безопасного удаления задачи по ID без глушения системных ошибок."""
+        try:
+            scheduler.remove_job(job_id)
+        except JobLookupError:
+            # Игнорируем ТОЛЬКО ошибку того, что задача не найдена в планировщике
+            pass
+
+
+    @staticmethod
+    def _remove_scheduler_jobs(task_id: int):
+        """Удаляет связанные работы из планировщика."""
+        try:
+            scheduler.remove_job(f"task_{task_id}")
+        except JobLookupError:
+            pass
+        try:
+            scheduler.remove_job(f"task_end_{task_id}")
+        except JobLookupError:
+            pass
+
+
+    @staticmethod
+    def _get_display_end_time(localized_dt: datetime, duration: int | None) -> str | None:
+        """Возвращает форматированную строку времени завершения задачи или None."""
+        if not duration or duration <= 0:
+            return None
+
+        task_end_time = localized_dt + timedelta(minutes=duration)
+
+        if task_end_time.date() == localized_dt.date():
+            return task_end_time.strftime('%H:%M')
+        return task_end_time.strftime('%Y-%m-%d %H:%M')
+
+        # Внутренняя вспомогательная функция, чтобы не дублировать код
+
+    def _schedule_or_remove(self, job_id: str, run_date: datetime, notification_func, job_kwargs: dict):
+        now = datetime.now(self.tz)
+        if run_date > now:
+            scheduler.add_job(
+                notification_func,
+                trigger='date',
+                run_date=run_date,
+                kwargs=job_kwargs,
+                id=job_id,
+                replace_existing=True
+            )
+        else:
+            self._safe_remove_job(job_id)
 
     async def _find_first_free_slot(self, duration_mins: int) -> datetime:
         """
@@ -56,6 +111,50 @@ class TaskActionsService:
             if not overlap:
                 return candidate_start
 
+
+    def _update_scheduler_jobs(
+        self,
+        task_id: int,
+        content: str,
+        details: str | None,
+        localized_dt: datetime,
+        duration: int | None
+    ):
+        """
+        Добавляет/обновляет задачи старта и завершения в планировщике.
+        Если время в прошлом, удаляет соответствующие работы.
+        """
+        now = datetime.now(self.tz)
+
+        job_kwargs = {
+            'bot': self.bot,
+            'user_id': self.user['tg_id'],
+            'task_text': content,
+            'task_details': details,
+            'task_id': task_id
+        }
+
+        self._schedule_or_remove(
+            job_id=f"task_{task_id}",
+            run_date=localized_dt,
+            notification_func=send_task_notification,
+            job_kwargs=job_kwargs
+        )
+
+        # 2. Задача на завершение
+        if duration and duration > 0:
+            task_end_time = localized_dt + timedelta(minutes=duration)
+            self._schedule_or_remove(
+                job_id=f"task_end_{task_id}",
+                run_date=task_end_time,
+                notification_func=send_task_end_notification,
+                job_kwargs=job_kwargs
+            )
+        else:
+            self._safe_remove_job(f"task_end_{task_id}")
+
+
+
     async def create(self, command: TaskActionSchema, message: Message):
         if not command.time:
             # Находим первый свободный временной слот в расписании
@@ -74,7 +173,6 @@ class TaskActionsService:
                 return
 
         # 1. Сохраняем в БД и получаем ID новой задачи
-        task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
         new_task_id = await create_task(
             db=self.db,
             user_id=self.user['id'],  # Обращение как к Row (по ключу)
@@ -85,52 +183,22 @@ class TaskActionsService:
         )
 
         # 2. Добавляем в планировщик на лету
-        scheduler.add_job(
-            send_task_notification,
-            trigger='date',
-            run_date=localized_dt,  # Объект datetime
-            kwargs={
-                'bot': self.bot,
-                'user_id': self.user['tg_id'],  # Передаем Telegram ID для отправки уведомления
-                'task_text': command.content,
-                'task_details': command.details,
-                'task_id': new_task_id
-            },
-            id=f"task_{new_task_id}",
-            replace_existing=True
+        self._update_scheduler_jobs(
+            task_id=new_task_id,
+            content=command.content,
+            details=command.details,
+            localized_dt=localized_dt,
+            duration=command.duration
         )
 
-        if command.duration and command.duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=command.duration)
-            scheduler.add_job(
-                send_task_end_notification,
-                trigger='date',
-                run_date=task_end_time,
-                kwargs={
-                    'bot': self.bot,
-                    'user_id': self.user['tg_id'],
-                    'task_text': command.content,
-                    'task_details': command.details,
-                    'task_id': new_task_id
-                },
-                id=f"task_end_{new_task_id}",
-                replace_existing=True
-            )
-
-        display_end_time = None
-        if command.duration and command.duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=command.duration)
-            if task_end_time.date() == localized_dt.date():
-                display_end_time = task_end_time.strftime('%H:%M')
-            else:
-                display_end_time = task_end_time.strftime('%Y-%m-%d %H:%M')
+        display_end_time = self._get_display_end_time(localized_dt, command.duration)
 
         confirm_text = TaskMessages.task_created(
             content=command.content,
             display_time=display_time,
             details=command.details,
             duration=command.duration,
-            display_end_time=display_time
+            display_end_time=display_end_time
         )
         await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
@@ -190,65 +258,15 @@ class TaskActionsService:
         )
 
         # 4. Обновляем планировщик
-        # Проверяем, в будущем ли время
-        now = datetime.now(self.tz)
-        if localized_dt > now:
-            scheduler.add_job(
-                send_task_notification,
-                trigger='date',
-                run_date=localized_dt,
-                kwargs={
-                    'bot': self.bot,
-                    'user_id': self.user['tg_id'],
-                    'task_text': new_content,
-                    'task_details': new_details,
-                    'task_id': task_id
-                },
-                id=f"task_{task_id}",
-                replace_existing=True
-            )
-        else:
-            # Если новое время ушло в прошлое, удаляем задачу из планировщика (если она была запланирована)
-            try:
-                scheduler.remove_job(f"task_{task_id}")
-            except Exception:
-                pass
+        self._update_scheduler_jobs(
+            task_id=task_id,
+            content=new_content,
+            details=new_details,
+            localized_dt=localized_dt,
+            duration=new_duration
+        )
 
-        if new_duration and new_duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=new_duration)
-            if task_end_time > now:
-                scheduler.add_job(
-                    send_task_end_notification,
-                    trigger='date',
-                    run_date=task_end_time,
-                    kwargs={
-                        'bot': self.bot,
-                        'user_id': self.user['tg_id'],
-                        'task_text': new_content,
-                        'task_details': new_details,
-                        'task_id': task_id
-                    },
-                    id=f"task_end_{task_id}",
-                    replace_existing=True
-                )
-            else:
-                try:
-                    scheduler.remove_job(f"task_end_{task_id}")
-                except Exception:
-                    pass
-        else:
-            try:
-                scheduler.remove_job(f"task_end_{task_id}")
-            except Exception:
-                pass
-
-        display_end_time = None
-        if command.duration and command.duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=command.duration)
-            if task_end_time.date() == localized_dt.date():
-                display_end_time = task_end_time.strftime('%H:%M')
-            else:
-                display_end_time = task_end_time.strftime('%Y-%m-%d %H:%M')
+        display_end_time = self._get_display_end_time(localized_dt, new_duration)
 
         confirm_text = TaskMessages.task_updated(
             content=new_content,
@@ -314,14 +332,7 @@ class TaskActionsService:
             await complete_task(self.db, tid)
 
             # 3. Удаляем из планировщика
-            try:
-                scheduler.remove_job(f"task_{tid}")
-            except Exception:
-                pass
-            try:
-                scheduler.remove_job(f"task_end_{tid}")
-            except Exception:
-                pass
+            self._remove_scheduler_jobs(tid)
 
             completed_titles.append(task['content'])
 
