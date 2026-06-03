@@ -3,7 +3,14 @@ import aiosqlite
 from database.models import TaskStatus
 
 
-async def create_task(db: aiosqlite.Connection, content: str, time: int, user_id: int, details: str = None, duration: int = None) -> int:
+async def create_task(
+        db: aiosqlite.Connection,
+        content: str,
+        time: int,
+        user_id: int,
+        details: str = None,
+        duration: int = None
+) -> int:
     """
     Записывает задачу с точным временем unix timestamp, когда должно сработать напоминание.
     """

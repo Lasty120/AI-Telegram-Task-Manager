@@ -7,7 +7,7 @@ from aiosqlite import Connection, Row
 from messages import TaskMessages
 
 from database.schemas import TaskActionSchema
-from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task
+from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, get_user_tasks
 from reply_keyboards import get_main_kb
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
 
@@ -27,7 +27,7 @@ class TaskActionsService:
         if not duration_mins:
             duration_mins = 30
             
-        from database.crud.task import get_user_tasks
+
         active_tasks = await get_user_tasks(self.db, self.user['id'])
         
         now = datetime.now(self.tz)
@@ -74,6 +74,7 @@ class TaskActionsService:
                 return
 
         # 1. Сохраняем в БД и получаем ID новой задачи
+        task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
         new_task_id = await create_task(
             db=self.db,
             user_id=self.user['id'],  # Обращение как к Row (по ключу)
@@ -116,21 +117,31 @@ class TaskActionsService:
                 replace_existing=True
             )
 
+        display_end_time = None
+        if command.duration and command.duration > 0:
+            task_end_time = localized_dt + timedelta(minutes=command.duration)
+            if task_end_time.date() == localized_dt.date():
+                display_end_time = task_end_time.strftime('%H:%M')
+            else:
+                display_end_time = task_end_time.strftime('%Y-%m-%d %H:%M')
+
         confirm_text = TaskMessages.task_created(
             content=command.content,
             display_time=display_time,
             details=command.details,
-            duration=command.duration
+            duration=command.duration,
+            display_end_time=display_time
         )
         await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
     async def update(self, command: TaskActionSchema, message: Message):
-        if not command.task_id:
+        task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
+        if not task_id:
             await message.answer(TaskMessages.TASK_UPDATE_ID_MISSING)
             return
 
         # 1. Получаем задачу из базы данных
-        task = await get_task_by_id(self.db, command.task_id)
+        task = await get_task_by_id(self.db, task_id)
         if not task:
             await message.answer(TaskMessages.TASK_NOT_FOUND)
             return
@@ -166,14 +177,16 @@ class TaskActionsService:
         # Длительность
         new_duration = command.duration if command.duration is not None else (task['duration'] if 'duration' in task.keys() else None)
 
+
+
         # 3. Сохраняем изменения в БД
         await update_task(
             db=self.db,
-            task_id=command.task_id,
+            task_id=task_id,
             content=new_content,
             details=new_details,
             time_val=new_time_timestamp,
-            duration=new_duration
+            duration=new_duration,
         )
 
         # 4. Обновляем планировщик
@@ -189,15 +202,15 @@ class TaskActionsService:
                     'user_id': self.user['tg_id'],
                     'task_text': new_content,
                     'task_details': new_details,
-                    'task_id': command.task_id
+                    'task_id': task_id
                 },
-                id=f"task_{command.task_id}",
+                id=f"task_{task_id}",
                 replace_existing=True
             )
         else:
             # Если новое время ушло в прошлое, удаляем задачу из планировщика (если она была запланирована)
             try:
-                scheduler.remove_job(f"task_{command.task_id}")
+                scheduler.remove_job(f"task_{task_id}")
             except Exception:
                 pass
 
@@ -213,27 +226,36 @@ class TaskActionsService:
                         'user_id': self.user['tg_id'],
                         'task_text': new_content,
                         'task_details': new_details,
-                        'task_id': command.task_id
+                        'task_id': task_id
                     },
-                    id=f"task_end_{command.task_id}",
+                    id=f"task_end_{task_id}",
                     replace_existing=True
                 )
             else:
                 try:
-                    scheduler.remove_job(f"task_end_{command.task_id}")
+                    scheduler.remove_job(f"task_end_{task_id}")
                 except Exception:
                     pass
         else:
             try:
-                scheduler.remove_job(f"task_end_{command.task_id}")
+                scheduler.remove_job(f"task_end_{task_id}")
             except Exception:
                 pass
+
+        display_end_time = None
+        if command.duration and command.duration > 0:
+            task_end_time = localized_dt + timedelta(minutes=command.duration)
+            if task_end_time.date() == localized_dt.date():
+                display_end_time = task_end_time.strftime('%H:%M')
+            else:
+                display_end_time = task_end_time.strftime('%Y-%m-%d %H:%M')
 
         confirm_text = TaskMessages.task_updated(
             content=new_content,
             display_time=display_time,
             details=new_details,
-            duration=new_duration
+            duration=new_duration,
+            display_end_time=display_end_time,
         )
         await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
@@ -259,33 +281,61 @@ class TaskActionsService:
 
 
     async def delete(self, command: TaskActionSchema, message: Message):
-        if not command.task_id:
+        # Собираем все ID задач для выполнения/удаления
+        task_ids = []
+        if command.task_id:
+            task_ids.append(command.task_id)
+        if command.task_ids:
+            for tid in command.task_ids:
+                if tid not in task_ids:
+                    task_ids.append(tid)
+
+        if not task_ids:
             await message.answer(TaskMessages.TASK_DELETE_ID_MISSING)
             return
 
-        # 1. Получаем задачу из базы данных
-        task = await get_task_by_id(self.db, command.task_id)
-        if not task:
-            await message.answer(TaskMessages.TASK_NOT_FOUND)
+        completed_titles = []
+        not_found_count = 0
+        denied_count = 0
+
+        for tid in task_ids:
+            # 1. Получаем задачу из базы данных
+            task = await get_task_by_id(self.db, tid)
+            if not task:
+                not_found_count += 1
+                continue
+
+            # Проверяем права: принадлежит ли задача текущему пользователю
+            if task['user_id'] != self.user['id']:
+                denied_count += 1
+                continue
+
+            # 2. Помечаем задачу как выполненную (status = 1)
+            await complete_task(self.db, tid)
+
+            # 3. Удаляем из планировщика
+            try:
+                scheduler.remove_job(f"task_{tid}")
+            except Exception:
+                pass
+            try:
+                scheduler.remove_job(f"task_end_{tid}")
+            except Exception:
+                pass
+
+            completed_titles.append(task['content'])
+
+        if not completed_titles:
+            if denied_count > 0:
+                await message.answer(TaskMessages.TASK_DELETE_ACCESS_DENIED)
+            elif not_found_count > 0:
+                await message.answer(TaskMessages.TASK_NOT_FOUND)
             return
 
-        # Проверяем права: принадлежит ли задача текущему пользователю
-        if task['user_id'] != self.user['id']:
-            await message.answer(TaskMessages.TASK_DELETE_ACCESS_DENIED)
-            return
+        if len(completed_titles) == 1:
+            confirm_text = TaskMessages.task_completed(completed_titles[0])
+        else:
+            tasks_list_str = ", ".join(f"\"{title}\"" for title in completed_titles)
+            confirm_text = f"✅ Задачи выполнены: {tasks_list_str}"
 
-        # 2. Помечаем задачу как выполненную (status = 1)
-        await complete_task(self.db, command.task_id)
-
-        # 3. Удаляем из планировщика
-        try:
-            scheduler.remove_job(f"task_{command.task_id}")
-        except Exception:
-            pass
-        try:
-            scheduler.remove_job(f"task_end_{command.task_id}")
-        except Exception:
-            pass
-
-        confirm_text = TaskMessages.task_completed(task['content'])
         await message.answer(confirm_text, parse_mode='HTML', reply_markup=get_main_kb())

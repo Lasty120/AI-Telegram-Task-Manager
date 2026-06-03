@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram.utils.markdown import html_decoration as hd
 
 
@@ -35,11 +35,11 @@ class TaskMessages:
     TASK_DELAYED_SUCCESS = "⏰ Задача отложена на 15 минут!"
 
     @staticmethod
-    def task_created(content: str, display_time: str, details: str = None, duration: int = None) -> str:
+    def task_created(content: str, display_time: str, details: str = None, display_end_time: str = None,  duration: int = None) -> str:
         escaped_content = hd.quote(content)
-        text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}"
-        if duration:
-            text += f" (длительность: {duration} мин)"
+        text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}\n"
+        if display_end_time:
+            text += f"До {display_end_time} (Длительность {duration} минут)"
         if details:
             escaped_details = hd.quote(details)
             text += f"\n📖 Детали: <i>{escaped_details}</i>"
@@ -52,11 +52,11 @@ class TaskMessages:
     INVALID_UPDATE_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ при обновлении."
 
     @staticmethod
-    def task_updated(content: str, display_time: str, details: str = None, duration: int = None) -> str:
+    def task_updated(content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None) -> str:
         escaped_content = hd.quote(content)
-        text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}"
-        if duration:
-            text += f" (длительность: {duration} мин)"
+        text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}\n"
+        if display_end_time:
+            text += f"До {display_end_time} (длительность {duration} минут)"
         if details:
             escaped_details = hd.quote(details)
             text += f"\n📖 Детали: <i>{escaped_details}</i>"
@@ -74,10 +74,19 @@ class TaskMessages:
             task_datetime = datetime.fromtimestamp(task['time'], tz)
             formatted_time = task_datetime.strftime('%d.%m %H:%M')
             escaped_content = hd.quote(task['content'])
+
             task_line = f"{index}. <b>{escaped_content}</b>"
+
             if 'duration' in task.keys() and task['duration']:
-                task_line += f" ({task['duration']} мин)"
-            task_line += f" — ⏰ {formatted_time}"
+                end_datetime = task_datetime + timedelta(minutes=task['duration'])
+                if end_datetime.date() == task_datetime.date():
+                    formatted_end = end_datetime.strftime('%H:%M')
+                else:
+                    formatted_end = end_datetime.strftime('%d.%m %H:%M')
+                task_line += f" — ⏰ {formatted_time} (до {formatted_end})"
+            else:
+                task_line += f" — ⏰ {formatted_time}"
+
             if task['details']:
                 escaped_details = hd.quote(task['details'])
                 task_line += f"\n   <i>{escaped_details}</i>"
