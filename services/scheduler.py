@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import aiosqlite
-import pytz
 import logging
 
 from messages import TaskMessages
@@ -8,8 +7,7 @@ from messages import TaskMessages
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
-from reply_keyboards import get_main_kb
-from inline_keyboards import get_task_action_keyboard
+from keyboards.inline_keyboards import get_task_action_keyboard
 from config import DB_PATH, TIMEZONE
 
 # Создаем глобальный инстанс планировщика

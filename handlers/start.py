@@ -4,7 +4,7 @@ from aiogram.types import Message
 from aiosqlite import Row
 from messages import StartMessages
 
-from reply_keyboards import get_main_kb
+from keyboards.reply_keyboards import get_main_kb
 
 
 router = Router()
