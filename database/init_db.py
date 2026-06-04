@@ -7,7 +7,8 @@ async def init_db(db_path: str):
         await db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_id INTEGER UNIQUE NOT NULL
+            tg_id INTEGER UNIQUE NOT NULL,
+            lang TEXT DEFAULT 'ru'
         );
 
         CREATE TABLE IF NOT EXISTS tasks (
@@ -23,6 +24,12 @@ async def init_db(db_path: str):
         """)
         
         # Безопасная автомиграция: добавляем колонки, если их еще нет
+        async with db.execute("PRAGMA table_info(users);") as cursor:
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+            if "lang" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN lang TEXT DEFAULT 'ru';")
+
         async with db.execute("PRAGMA table_info(tasks);") as cursor:
             columns = await cursor.fetchall()
             column_names = [col[1] for col in columns]

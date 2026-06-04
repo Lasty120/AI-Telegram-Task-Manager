@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from aiogram.utils.markdown import html_decoration as hd
+from utils.context import user_lang
 
 
 def format_tasks_message(tasks: list, empty_text: str, header_text: str) -> str:
@@ -26,7 +27,9 @@ def format_tasks_message(tasks: list, empty_text: str, header_text: str) -> str:
             else:
                 formatted_end = end_datetime.strftime('%d.%m %H:%M')
 
-            task_line += f" — ⏰ {formatted_time} (до {formatted_end})"
+            lang = user_lang.get()
+            until_word = "until" if lang == "en" else "до"
+            task_line += f" — ⏰ {formatted_time} ({until_word} {formatted_end})"
         else:
             task_line += f" — ⏰ {formatted_time}"
 

@@ -17,7 +17,7 @@ async def cmd_start_handler(message: Message, user: Row):
     """
 
     await message.answer(
-        text=StartMessages.WELCOME,
+        text=StartMessages.welcome(),
         parse_mode="HTML",
         reply_markup=get_main_kb()
     )

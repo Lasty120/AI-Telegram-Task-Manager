@@ -25,8 +25,8 @@ async def get_my_tasks_handler(
 
     response_text = format_tasks_message(
         tasks=tasks,
-        empty_text=TaskMessages.TASKS_EMPTY,
-        header_text=TaskMessages.TASKS_HEADER
+        empty_text=TaskMessages.tasks_empty(),
+        header_text=TaskMessages.tasks_header()
     )
 
     # 4. Отправляем пользователю
@@ -44,8 +44,8 @@ async def get_my_completed_tasks_handler(
 
     response_text = format_tasks_message(
         tasks=tasks,
-        empty_text=TaskMessages.COMPLETED_TASKS_EMPTY,
-        header_text=TaskMessages.COMPLETED_TASKS_HEADER
+        empty_text=TaskMessages.completed_tasks_empty(),
+        header_text=TaskMessages.completed_tasks_header()
     )
 
     # 4. Отправляем пользователю

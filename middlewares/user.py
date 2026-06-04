@@ -7,6 +7,7 @@ import aiosqlite
 
 # Импортируй свою обновленную функцию CRUD
 from database.crud.user import get_or_create_user
+from utils.context import user_lang
 
 
 # Middleware на получение и создание юзера
@@ -31,4 +32,9 @@ class UserMiddleware(BaseMiddleware):
 
         data["user"] = user
 
-        return await handler(event, data)
+        lang = user["lang"] if "lang" in user.keys() else "ru"
+        token = user_lang.set(lang)
+        try:
+            return await handler(event, data)
+        finally:
+            user_lang.reset(token)

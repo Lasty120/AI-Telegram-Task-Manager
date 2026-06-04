@@ -21,3 +21,18 @@ async def get_or_create_user(db: aiosqlite.Connection, tg_id: int) -> aiosqlite.
     # 3. Возвращаем свежесозданного пользователя
     async with db.execute("SELECT * FROM users WHERE tg_id = ?", (tg_id,)) as cursor:
         return await cursor.fetchone()
+
+
+async def change_language(db: aiosqlite.Connection, tg_id: int, user: aiosqlite.Row):
+    safe_tg_id = int(tg_id)
+    # Определяем новый язык динамически
+    new_lang = "en" if user["lang"] == "ru" else "ru"
+
+    await db.execute(
+        "UPDATE users SET lang = ? WHERE tg_id = ?",
+        (new_lang, safe_tg_id)
+    )
+
+    await db.commit()
+
+    return new_lang

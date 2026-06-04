@@ -74,7 +74,7 @@ class TaskActionsService:
                 task_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer(TaskMessages.INVALID_TIME_FORMAT)
+                await message.answer(TaskMessages.invalid_time_format())
                 return
 
         # 1. Сохраняем в БД и получаем ID новой задачи
@@ -110,18 +110,18 @@ class TaskActionsService:
     async def update(self, command: TaskActionSchema, message: Message):
         task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
         if not task_id:
-            await message.answer(TaskMessages.TASK_UPDATE_ID_MISSING)
+            await message.answer(TaskMessages.task_update_id_missing())
             return
 
         # 1. Получаем задачу из базы данных
         task = await get_task_by_id(self.db, task_id)
         if not task:
-            await message.answer(TaskMessages.TASK_NOT_FOUND)
+            await message.answer(TaskMessages.task_not_found())
             return
 
         # Проверяем права: принадлежит ли задача текущему пользователю
         if task['user_id'] != self.user['id']:
-            await message.answer(TaskMessages.TASK_UPDATE_ACCESS_DENIED)
+            await message.answer(TaskMessages.task_update_access_denied())
             return
 
         # 2. Определяем обновленные значения
@@ -142,7 +142,7 @@ class TaskActionsService:
                 new_time_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer(TaskMessages.INVALID_UPDATE_TIME_FORMAT)
+                await message.answer(TaskMessages.invalid_update_time_format())
                 return
         else:
             localized_dt = datetime.fromtimestamp(new_time_timestamp, self.tz)
@@ -185,14 +185,14 @@ class TaskActionsService:
 
     async def select(self, command: TaskActionSchema, message: Message):
         if not command.task_ids:
-            await message.answer(TaskMessages.SEARCH_EMPTY)
+            await message.answer(TaskMessages.search_empty())
             return
 
         # Запрашиваем найденные задачи из БД
         tasks = await get_tasks_by_ids(db=self.db, task_ids=command.task_ids, user_id=self.user["id"])
 
         if not tasks:
-            await message.answer(TaskMessages.SEARCH_NOT_FOUND)
+            await message.answer(TaskMessages.search_not_found())
             return
 
         response_text = TaskMessages.search_results(
@@ -214,7 +214,7 @@ class TaskActionsService:
                     task_ids.append(tid)
 
         if not task_ids:
-            await message.answer(TaskMessages.TASK_DELETE_ID_MISSING)
+            await message.answer(TaskMessages.task_delete_id_missing())
             return
 
         completed_titles = []
@@ -243,15 +243,14 @@ class TaskActionsService:
 
         if not completed_titles:
             if denied_count > 0:
-                await message.answer(TaskMessages.TASK_DELETE_ACCESS_DENIED)
+                await message.answer(TaskMessages.task_delete_access_denied())
             elif not_found_count > 0:
-                await message.answer(TaskMessages.TASK_NOT_FOUND)
+                await message.answer(TaskMessages.task_not_found())
             return
 
         if len(completed_titles) == 1:
             confirm_text = TaskMessages.task_completed(completed_titles[0])
         else:
-            tasks_list_str = ", ".join(f"\"{title}\"" for title in completed_titles)
-            confirm_text = f"✅ Задачи выполнены: {tasks_list_str}"
+            confirm_text = TaskMessages.tasks_completed_plural(completed_titles)
 
         await message.answer(confirm_text, parse_mode='HTML', reply_markup=get_main_kb())

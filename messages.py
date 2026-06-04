@@ -1,75 +1,216 @@
 from datetime import datetime, timedelta
 from aiogram.utils.markdown import html_decoration as hd
+from utils.context import user_lang
 
 
 class StartMessages:
-    WELCOME = (
-        "👋 <b>Добро пожаловать в умный менеджер задач!</b>\n\n"
-        "Я помогу тебе планировать дела, запоминать слова и ничего не забывать. "
-        "Тебе не нужно нажимать сложные кнопки — просто <b>напиши мне текст</b> или отправь <b>голосовое сообщение</b>, а я сам всё пойму и организую.\n\n"
-        "🛠 <b>Что я умею:</b>\n\n"
-        "📝 <b>Создавать задачи:</b>\n"
-        "• <i>«Напомни позвонить маме завтра в 18:00»</i>\n"
-        "• <i>«Учи слово Apple»</i>\n\n"
-        "🔄 <b>Изменять планы:</b>\n"
-        "• <i>«Перенеси созвон с Васей на 19:30»</i>\n\n"
-        "✅ <b>Отмечать выполненное:</b>\n"
-        "• <i>«Я купил хлеб, удали эту задачу»</i>\n\n"
-        "🔍 <b>Искать планы:</b>\n"
-        "• <i>«Какие у меня планы на выходные?»</i>\n\n"
-        "👇 Используй кнопки в меню ниже, чтобы быстро просмотреть свои текущие или завершенные задачи."
-    )
+    @classmethod
+    def welcome(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "👋 <b>Добро пожаловать в умный менеджер задач!</b>\n\n"
+                "Я помогу тебе планировать дела, запоминать слова и ничего не забывать. "
+                "Тебе не нужно нажимать сложные кнопки — просто <b>напиши мне текст</b> или отправь <b>голосовое сообщение</b>, а я сам всё пойму и организую.\n\n"
+                "🛠 <b>Что я умею:</b>\n\n"
+                "📝 <b>Создавать задачи:</b>\n"
+                "• <i>«Напомни позвонить маме завтра в 18:00»</i>\n"
+                "• <i>«Учи слово Apple»</i>\n\n"
+                "🔄 <b>Изменять планы:</b>\n"
+                "• <i>«Перенеси созвон с Васей на 19:30»</i>\n\n"
+                "✅ <b>Отмечать выполненное:</b>\n"
+                "• <i>«Я купил хлеб, удали эту задачу»</i>\n\n"
+                "🔍 <b>Искать планы:</b>\n"
+                "• <i>«Какие у меня планы на выходные?»</i>\n\n"
+                "👇 Используй кнопки в меню ниже, чтобы быстро просмотреть свои текущие или завершенные задачи."
+            ),
+            "en": (
+                "👋 <b>Welcome to the smart task manager!</b>\n\n"
+                "I will help you plan your tasks, learn words and remember everything. "
+                "You don't need to press complex buttons — just <b>text me</b> or send a <b>voice message</b>, and I will understand and organize everything myself.\n\n"
+                "🛠 <b>What I can do:</b>\n\n"
+                "📝 <b>Create tasks:</b>\n"
+                "• <i>“Remind me to call mom tomorrow at 18:00”</i>\n"
+                "• <i>“Learn the word Apple”</i>\n\n"
+                "🔄 <b>Change plans:</b>\n"
+                "• <i>“Move call with Vasya to 19:30”</i>\n\n"
+                "✅ <b>Mark as completed:</b>\n"
+                "• <i>“I bought bread, delete this task”</i>\n\n"
+                "🔍 <b>Search plans:</b>\n"
+                "• <i>“What are my plans for the weekend?”</i>\n\n"
+                "👇 Use the buttons in the menu below to quickly view your active or completed tasks."
+            )
+        }
+        return translations.get(lang, translations["ru"])
 
 
 class TaskMessages:
-    # Task listing (handlers/tasks.py)
-    TASKS_EMPTY = "У вас пока нет запланированных задач. Используйте /create_task"
-    TASKS_HEADER = "<b>Ваш список задач:</b>"
-    COMPLETED_TASKS_EMPTY = "У вас пока нет выполненных задач. Используйте /create_task"
-    COMPLETED_TASKS_HEADER = "<b>Ваш список выполненных задач:</b>"
-    # Task creation (actions.py)
-    INVALID_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ"
+    @classmethod
+    def tasks_empty(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "У вас пока нет запланированных задач. Используйте /create_task",
+            "en": "You have no scheduled tasks yet. Use /create_task"
+        }
+        return translations.get(lang, translations["ru"])
 
-    # Alert constants for notifications.py
-    TASK_COMPLETED_SUCCESS = "✅ Задача успешно выполнена!"
-    TASK_DELAYED_SUCCESS = "⏰ Задача отложена на 15 минут!"
+    @classmethod
+    def tasks_header(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Ваш список задач:</b>",
+            "en": "<b>Your task list:</b>"
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def task_created(content: str, display_time: str, details: str = None, display_end_time: str = None,  duration: int = None) -> str:
+    @classmethod
+    def completed_tasks_empty(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "У вас пока нет выполненных задач. Используйте /create_task",
+            "en": "You have no completed tasks yet. Use /create_task"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def completed_tasks_header(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Ваш список выполненных задач:</b>",
+            "en": "<b>Your list of completed tasks:</b>"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def invalid_time_format(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ Некорректный формат времени от ИИ",
+            "en": "⚠️ Invalid time format from AI"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_completed_success(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "✅ Задача успешно выполнена!",
+            "en": "✅ Task successfully completed!"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_delayed_success(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⏰ Задача отложена на 15 минут!",
+            "en": "⏰ Task delayed by 15 minutes!"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, duration: int = None) -> str:
+        lang = user_lang.get()
         escaped_content = hd.quote(content)
-        text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}\n"
-        if display_end_time:
-            text += f"До {display_end_time} (Длительность {duration} минут)"
-        if details:
-            escaped_details = hd.quote(details)
-            text += f"\n📖 Детали: <i>{escaped_details}</i>"
+        if lang == "en":
+            text = f"✅ Task created: <b>{escaped_content}</b> for {display_time}\n"
+            if display_end_time:
+                text += f"Until {display_end_time} (Duration {duration} minutes)"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n📖 Details: <i>{escaped_details}</i>"
+        else:
+            text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}\n"
+            if display_end_time:
+                text += f"До {display_end_time} (Длительность {duration} минут)"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n📖 Детали: <i>{escaped_details}</i>"
         return text
 
-    # Task updating (actions.py)
-    TASK_UPDATE_ID_MISSING = "⚠️ Не удалось определить, какую именно задачу нужно изменить."
-    TASK_NOT_FOUND = "⚠️ Задача с таким ID не найдена."
-    TASK_UPDATE_ACCESS_DENIED = "⚠️ У вас нет прав на редактирование этой задачи."
-    INVALID_UPDATE_TIME_FORMAT = "⚠️ Некорректный формат времени от ИИ при обновлении."
+    @classmethod
+    def task_update_id_missing(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ Не удалось определить, какую именно задачу нужно изменить.",
+            "en": "⚠️ Failed to identify which specific task to modify."
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def task_updated(content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None) -> str:
+    @classmethod
+    def task_not_found(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ Задача с таким ID не найдена.",
+            "en": "⚠️ Task with this ID not found."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_update_access_denied(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ У вас нет прав на редактирование этой задачи.",
+            "en": "⚠️ You do not have permission to edit this task."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def invalid_update_time_format(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ Некорректный формат времени от ИИ при обновлении.",
+            "en": "⚠️ Invalid time format from AI during update."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_updated(cls, content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None) -> str:
+        lang = user_lang.get()
         escaped_content = hd.quote(content)
-        text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}\n"
-        if display_end_time:
-            text += f"До {display_end_time} (длительность {duration} минут)"
-        if details:
-            escaped_details = hd.quote(details)
-            text += f"\n📖 Детали: <i>{escaped_details}</i>"
+        if lang == "en":
+            text = f"🔄 Task updated: <b>{escaped_content}</b> for {display_time}\n"
+            if display_end_time:
+                text += f"Until {display_end_time} (duration {duration} minutes)"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n📖 Details: <i>{escaped_details}</i>"
+        else:
+            text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}\n"
+            if display_end_time:
+                text += f"До {display_end_time} (длительность {duration} минут)"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n📖 Детали: <i>{escaped_details}</i>"
         return text
 
-    # Task selection/searching (actions.py)
-    SEARCH_EMPTY = "🔍 По вашему запросу ничего не найдено."
-    SEARCH_NOT_FOUND = "🔍 Задачи не найдены или у вас нет к ним доступа."
+    @classmethod
+    def search_empty(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "🔍 По вашему запросу ничего не найдено.",
+            "en": "🔍 Nothing found for your request."
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def search_results(query: str, tasks: list, tz) -> str:
+    @classmethod
+    def search_not_found(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "🔍 Задачи не найдены или у вас нет к ним доступа.",
+            "en": "🔍 Tasks not found or you do not have access to them."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def search_results(cls, query: str, tasks: list, tz) -> str:
+        lang = user_lang.get()
         escaped_query = hd.quote(query)
-        response_lines = [f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>", ""]
+        if lang == "en":
+            response_lines = [f"🔍 <b>Search results for '{escaped_query}':</b>", ""]
+        else:
+            response_lines = [f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>", ""]
+
         for index, task in enumerate(tasks, 1):
             task_datetime = datetime.fromtimestamp(task['time'], tz)
             formatted_time = task_datetime.strftime('%d.%m %H:%M')
@@ -83,7 +224,10 @@ class TaskMessages:
                     formatted_end = end_datetime.strftime('%H:%M')
                 else:
                     formatted_end = end_datetime.strftime('%d.%m %H:%M')
-                task_line += f" — ⏰ {formatted_time} (до {formatted_end})"
+                if lang == "en":
+                    task_line += f" — ⏰ {formatted_time} (until {formatted_end})"
+                else:
+                    task_line += f" — ⏰ {formatted_time} (до {formatted_end})"
             else:
                 task_line += f" — ⏰ {formatted_time}"
 
@@ -93,52 +237,146 @@ class TaskMessages:
             response_lines.append(task_line)
         return "\n".join(response_lines)
 
-    # Task completion/deletion (actions.py)
-    TASK_DELETE_ID_MISSING = "⚠️ Не удалось определить, какую именно задачу нужно завершить."
-    TASK_DELETE_ACCESS_DENIED = "⚠️ У вас нет прав на завершение этой задачи."
+    @classmethod
+    def task_delete_id_missing(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ Не удалось определить, какую именно задачу нужно завершить.",
+            "en": "⚠️ Failed to identify which specific task to complete."
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def task_completed(content: str) -> str:
-        escaped_content = hd.quote(content)
-        return f"✅ Задача выполнена:\n <b>{escaped_content}</b>"
+    @classmethod
+    def task_delete_access_denied(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⚠️ У вас нет прав на завершение этой задачи.",
+            "en": "⚠️ You do not have permission to complete this task."
+        }
+        return translations.get(lang, translations["ru"])
 
-    # Scheduler notification (scheduler.py)
-    @staticmethod
-    def task_notification(content: str, details: str = None) -> str:
+    @classmethod
+    def task_completed(cls, content: str) -> str:
+        lang = user_lang.get()
         escaped_content = hd.quote(content)
-        text = f"🔔 <b>Напоминание:</b>\n{escaped_content}"
-        if details:
-            escaped_details = hd.quote(details)
-            text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
+        if lang == "en":
+            return f"✅ Task completed:\n <b>{escaped_content}</b>"
+        else:
+            return f"✅ Задача выполнена:\n <b>{escaped_content}</b>"
+
+    @classmethod
+    def tasks_completed_plural(cls, completed_titles: list) -> str:
+        lang = user_lang.get()
+        tasks_list_str = ", ".join(f"\"{title}\"" for title in completed_titles)
+        if lang == "en":
+            return f"✅ Tasks completed: {tasks_list_str}"
+        else:
+            return f"✅ Задачи выполнены: {tasks_list_str}"
+
+    @classmethod
+    def task_notification(cls, content: str, details: str = None) -> str:
+        lang = user_lang.get()
+        escaped_content = hd.quote(content)
+        if lang == "en":
+            text = f"🔔 <b>Reminder:</b>\n{escaped_content}"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n\n📝 <b>Details:</b>\n<i>{escaped_details}</i>"
+        else:
+            text = f"🔔 <b>Напоминание:</b>\n{escaped_content}"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
         return text
 
-    @staticmethod
-    def task_end_notification(content: str, details: str = None) -> str:
+    @classmethod
+    def task_end_notification(cls, content: str, details: str = None) -> str:
+        lang = user_lang.get()
         escaped_content = hd.quote(content)
-        text = f"🏁 <b>Задача завершена:</b>\n{escaped_content}"
-        if details:
-            escaped_details = hd.quote(details)
-            text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
+        if lang == "en":
+            text = f"🏁 <b>Task completed:</b>\n{escaped_content}"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n\n📝 <b>Details:</b>\n<i>{escaped_details}</i>"
+        else:
+            text = f"🏁 <b>Задача завершена:</b>\n{escaped_content}"
+            if details:
+                escaped_details = hd.quote(details)
+                text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
         return text
 
-    @staticmethod
-    def task_delay(new_dt: str) -> str:
-        text = f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})"
-        return text
+    @classmethod
+    def task_delay(cls, new_dt: str) -> str:
+        lang = user_lang.get()
+        if lang == "en":
+            return f"\n\n⏰ <b>Delayed by 15 minutes</b> (until {new_dt})"
+        else:
+            return f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})"
 
 
 class AiMessages:
-    LISTENING = "⏳ Слушаю..."
-    TRANSCRIPTION_ERROR = "❌ Произошла ошибка при расшифровке аудио."
-    THINKING = "🧠 Думаю..."
-    NO_TASKS_FOUND = "🤷‍♂️ Не нашёл никаких задач в вашем сообщении. Попробуйте написать иначе."
+    @classmethod
+    def listening(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⏳ Слушаю...",
+            "en": "⏳ Listening..."
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def execution_error(error_detail: str | None) -> str:
-        detail = hd.quote(error_detail) if error_detail else "Действие не может быть выполнено (возможно, указана дата в прошлом)."
-        return f"⚠️ Ошибка: {detail}"
+    @classmethod
+    def transcription_error(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "❌ Произошла ошибка при расшифровке аудио.",
+            "en": "❌ An error occurred during audio transcription."
+        }
+        return translations.get(lang, translations["ru"])
 
-    @staticmethod
-    def unknown_action(content: str) -> str:
+    @classmethod
+    def thinking(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "🧠 Думаю...",
+            "en": "🧠 Thinking..."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def no_tasks_found(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "🤷‍♂️ Не нашёл никаких задач в вашем сообщении. Попробуйте написать иначе.",
+            "en": "🤷‍♂️ Found no tasks in your message. Please try phrasing it differently."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def execution_error(cls, error_detail: str | None) -> str:
+        lang = user_lang.get()
+        if lang == "en":
+            detail = hd.quote(error_detail) if error_detail else "Action cannot be performed (possibly date is in the past)."
+            return f"⚠️ Error: {detail}"
+        else:
+            detail = hd.quote(error_detail) if error_detail else "Действие не может быть выполнено (возможно, указана дата в прошлом)."
+            return f"⚠️ Ошибка: {detail}"
+
+    @classmethod
+    def unknown_action(cls, content: str) -> str:
+        lang = user_lang.get()
         escaped_content = hd.quote(content)
-        return f"🤷‍♂️ Не совсем понял, что нужно сделать с '<b>{escaped_content}</b>'."
+        if lang == "en":
+            return f"🤷‍♂️ Did not completely understand what to do with '<b>{escaped_content}</b>'."
+        else:
+            return f"🤷‍♂️ Не совсем понял, что нужно сделать с '<b>{escaped_content}</b>'."
+
+
+class LangMessages:
+    @classmethod
+    def lang_successfully_changed(cls, new_lang: str) -> str:
+        lang = new_lang
+        translations = {
+            "ru": "Язык был успешно изменен!",
+            "en": "Language successfully changed."
+        }
+        return translations.get(lang, translations["ru"])

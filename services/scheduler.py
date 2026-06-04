@@ -3,6 +3,7 @@ import aiosqlite
 import logging
 
 from messages import TaskMessages
+from utils.context import user_lang
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
@@ -17,7 +18,23 @@ scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
     """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
-        text = TaskMessages.task_notification(task_text, task_details)
+        # Получаем язык пользователя из базы данных
+        lang = "ru"
+        try:
+            async with aiosqlite.connect(DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute("SELECT lang FROM users WHERE tg_id = ?", (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        lang = row["lang"]
+        except Exception as db_err:
+            logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
+
+        token = user_lang.set(lang)
+        try:
+            text = TaskMessages.task_notification(task_text, task_details)
+        finally:
+            user_lang.reset(token)
 
         await bot.send_message(
             chat_id=user_id,
@@ -32,7 +49,23 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
 async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
     """Эта функция будет вызываться планировщиком при окончании задачи"""
     try:
-        text = TaskMessages.task_end_notification(task_text, task_details)
+        # Получаем язык пользователя из базы данных
+        lang = "ru"
+        try:
+            async with aiosqlite.connect(DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute("SELECT lang FROM users WHERE tg_id = ?", (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        lang = row["lang"]
+        except Exception as db_err:
+            logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
+
+        token = user_lang.set(lang)
+        try:
+            text = TaskMessages.task_end_notification(task_text, task_details)
+        finally:
+            user_lang.reset(token)
 
         await bot.send_message(
             chat_id=user_id,

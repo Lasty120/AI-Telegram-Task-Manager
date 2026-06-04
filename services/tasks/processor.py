@@ -1,3 +1,5 @@
+from aiogram.enums import ParseMode
+
 from services.ai.service import parse_user_text
 from services.tasks.actions import TaskActionsService
 from database.crud.task import get_user_tasks
@@ -8,7 +10,7 @@ async def process_task_command(text: str, message, user, db):
     """
     Универсальная функция обработки текстовых команд (введенных вручную или расшифрованных из аудио).
     """
-    waiting_msg = await message.answer(AiMessages.THINKING)
+    waiting_msg = await message.answer(AiMessages.thinking())
 
     # Получаем текущие задачи пользователя
     user_tasks = await get_user_tasks(db, user["id"])
@@ -25,7 +27,7 @@ async def process_task_command(text: str, message, user, db):
     tasks = parsed_command.tasks
 
     if not tasks:
-        await message.answer(AiMessages.NO_TASKS_FOUND)
+        await message.answer(AiMessages.no_tasks_found())
         return
 
     # Инициализируем сервисный класс для обработки задач
@@ -49,4 +51,4 @@ async def process_task_command(text: str, message, user, db):
             await action_service.delete(command=task_cmd, message=message)
 
         else:
-            await message.answer(AiMessages.unknown_action(task_cmd.content or text))
+            await message.answer(AiMessages.unknown_action(task_cmd.content or text), parse_mode="HTML")

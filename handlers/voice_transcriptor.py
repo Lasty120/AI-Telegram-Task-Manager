@@ -20,7 +20,7 @@ async def handle_voice_message(
         db: Connection,
 ):
     # Даем пользователю понять, что бот принял задачу
-    waiting_msg = await message.answer(AiMessages.LISTENING)
+    waiting_msg = await message.answer(AiMessages.listening())
 
     # Получаем ID файла и формируем локальное имя файла
     file_id = message.voice.file_id
@@ -46,7 +46,7 @@ async def handle_voice_message(
         )
 
     except Exception as e:
-        await waiting_msg.edit_text(AiMessages.TRANSCRIPTION_ERROR)
+        await waiting_msg.edit_text(AiMessages.transcription_error())
         print(f"Ошибка транскрибации: {e}")
 
     finally:
