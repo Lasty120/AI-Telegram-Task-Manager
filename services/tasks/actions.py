@@ -1,18 +1,15 @@
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime
 from aiogram import Bot
 from aiogram.types import Message
 from aiosqlite import Connection, Row
 
 from messages import TaskMessages
-
-from apscheduler.jobstores.base import JobLookupError
-
 from database.schemas import TaskActionSchema
 from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, get_user_tasks
 from reply_keyboards import get_main_kb
-from services.scheduler import scheduler, send_task_notification, send_task_end_notification
 from config import TIMEZONE
+from services.task_scheduler import TaskSchedulerService
+from utils.formatters import get_display_end_time
 
 
 class TaskActionsService:
@@ -21,58 +18,7 @@ class TaskActionsService:
         self.user = user
         self.bot = bot
         self.tz = TIMEZONE
-
-
-    @staticmethod
-    def _safe_remove_job(job_id: str):
-        """Вспомогательный метод для безопасного удаления задачи по ID без глушения системных ошибок."""
-        try:
-            scheduler.remove_job(job_id)
-        except JobLookupError:
-            # Игнорируем ТОЛЬКО ошибку того, что задача не найдена в планировщике
-            pass
-
-
-    @staticmethod
-    def _remove_scheduler_jobs(task_id: int):
-        """Удаляет связанные работы из планировщика."""
-        try:
-            scheduler.remove_job(f"task_{task_id}")
-        except JobLookupError:
-            pass
-        try:
-            scheduler.remove_job(f"task_end_{task_id}")
-        except JobLookupError:
-            pass
-
-
-    @staticmethod
-    def _get_display_end_time(localized_dt: datetime, duration: int | None) -> str | None:
-        """Возвращает форматированную строку времени завершения задачи или None."""
-        if not duration or duration <= 0:
-            return None
-
-        task_end_time = localized_dt + timedelta(minutes=duration)
-
-        if task_end_time.date() == localized_dt.date():
-            return task_end_time.strftime('%H:%M')
-        return task_end_time.strftime('%Y-%m-%d %H:%M')
-
-        # Внутренняя вспомогательная функция, чтобы не дублировать код
-
-    def _schedule_or_remove(self, job_id: str, run_date: datetime, notification_func, job_kwargs: dict):
-        now = datetime.now(self.tz)
-        if run_date > now:
-            scheduler.add_job(
-                notification_func,
-                trigger='date',
-                run_date=run_date,
-                kwargs=job_kwargs,
-                id=job_id,
-                replace_existing=True
-            )
-        else:
-            self._safe_remove_job(job_id)
+        self.scheduler_service = TaskSchedulerService(bot=bot, user=user)
 
     async def _find_first_free_slot(self, duration_mins: int) -> datetime:
         """
@@ -112,47 +58,6 @@ class TaskActionsService:
                 return candidate_start
 
 
-    def _update_scheduler_jobs(
-        self,
-        task_id: int,
-        content: str,
-        details: str | None,
-        localized_dt: datetime,
-        duration: int | None
-    ):
-        """
-        Добавляет/обновляет задачи старта и завершения в планировщике.
-        Если время в прошлом, удаляет соответствующие работы.
-        """
-        now = datetime.now(self.tz)
-
-        job_kwargs = {
-            'bot': self.bot,
-            'user_id': self.user['tg_id'],
-            'task_text': content,
-            'task_details': details,
-            'task_id': task_id
-        }
-
-        self._schedule_or_remove(
-            job_id=f"task_{task_id}",
-            run_date=localized_dt,
-            notification_func=send_task_notification,
-            job_kwargs=job_kwargs
-        )
-
-        # 2. Задача на завершение
-        if duration and duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=duration)
-            self._schedule_or_remove(
-                job_id=f"task_end_{task_id}",
-                run_date=task_end_time,
-                notification_func=send_task_end_notification,
-                job_kwargs=job_kwargs
-            )
-        else:
-            self._safe_remove_job(f"task_end_{task_id}")
-
 
 
     async def create(self, command: TaskActionSchema, message: Message):
@@ -183,7 +88,7 @@ class TaskActionsService:
         )
 
         # 2. Добавляем в планировщик на лету
-        self._update_scheduler_jobs(
+        self.scheduler_service.update_scheduler_jobs(
             task_id=new_task_id,
             content=command.content,
             details=command.details,
@@ -191,7 +96,7 @@ class TaskActionsService:
             duration=command.duration
         )
 
-        display_end_time = self._get_display_end_time(localized_dt, command.duration)
+        display_end_time = get_display_end_time(localized_dt, command.duration)
 
         confirm_text = TaskMessages.task_created(
             content=command.content,
@@ -258,7 +163,7 @@ class TaskActionsService:
         )
 
         # 4. Обновляем планировщик
-        self._update_scheduler_jobs(
+        self.scheduler_service.update_scheduler_jobs(
             task_id=task_id,
             content=new_content,
             details=new_details,
@@ -266,7 +171,7 @@ class TaskActionsService:
             duration=new_duration
         )
 
-        display_end_time = self._get_display_end_time(localized_dt, new_duration)
+        display_end_time = get_display_end_time(localized_dt, new_duration)
 
         confirm_text = TaskMessages.task_updated(
             content=new_content,
@@ -332,7 +237,7 @@ class TaskActionsService:
             await complete_task(self.db, tid)
 
             # 3. Удаляем из планировщика
-            self._remove_scheduler_jobs(tid)
+            self.scheduler_service.remove_scheduler_jobs(tid)
 
             completed_titles.append(task['content'])
 

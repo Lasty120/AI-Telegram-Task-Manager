@@ -37,3 +37,15 @@ def format_tasks_message(tasks: list, empty_text: str, header_text: str) -> str:
         response_lines.append(task_line)
 
     return "\n".join(response_lines)
+
+
+def get_display_end_time(localized_dt: datetime, duration: int | None) -> str | None:
+    """Возвращает форматированную строку времени завершения задачи или None."""
+    if not duration or duration <= 0:
+        return None
+
+    task_end_time = localized_dt + timedelta(minutes=duration)
+
+    if task_end_time.date() == localized_dt.date():
+        return task_end_time.strftime('%H:%M')
+    return task_end_time.strftime('%Y-%m-%d %H:%M')
