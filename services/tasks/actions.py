@@ -20,7 +20,7 @@ class TaskActionsService:
         self.tz = TIMEZONE
         self.scheduler_service = TaskSchedulerService(bot=bot, user=user)
 
-    async def _find_first_free_slot(self, duration_mins: int) -> datetime:
+    async def _find_first_free_slot(self, duration_mins: int, exclude_task_id: int = None) -> datetime:
         """
         Находит первый свободный слот длительностью duration_mins начиная от текущего времени,
         который не перекрывается с другими активными задачами пользователя.
@@ -36,6 +36,8 @@ class TaskActionsService:
         
         intervals = []
         for task in active_tasks:
+            if exclude_task_id and task['id'] == exclude_task_id:
+                continue
             task_start = task['time']
             task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 30
             task_end = task_start + task_dur * 60
@@ -56,6 +58,31 @@ class TaskActionsService:
                     
             if not overlap:
                 return candidate_start
+
+    async def _check_conflict(self, start_ts: int, duration_mins: int, exclude_task_id: int = None) -> Row | None:
+        """
+        Проверяет, перекрывается ли временной интервал [start_ts, start_ts + duration_mins * 60]
+        с какими-либо существующими активными задачами пользователя.
+        Возвращает первую конфликтующую задачу или None.
+        """
+        if not duration_mins:
+            duration_mins = 30
+            
+        active_tasks = await get_user_tasks(self.db, self.user['id'])
+        end_ts = start_ts + duration_mins * 60
+        
+        for task in active_tasks:
+            if exclude_task_id and task['id'] == exclude_task_id:
+                continue
+            task_start = task['time']
+            task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 30
+            task_end = task_start + task_dur * 60
+            
+            # Условие пересечения интервалов:
+            if start_ts < task_end and end_ts > task_start:
+                return task
+        return None
+
 
 
 
@@ -96,16 +123,39 @@ class TaskActionsService:
             duration=command.duration
         )
 
-        display_end_time = get_display_end_time(localized_dt, command.duration)
+        # 3. Проверяем на конфликты с другими активными задачами (исключая саму новую задачу)
+        conflict_task = None
+        if command.time:
+            conflict_task = await self._check_conflict(task_timestamp, command.duration, exclude_task_id=new_task_id)
 
-        confirm_text = TaskMessages.task_created(
-            content=command.content,
-            display_time=display_time,
-            details=command.details,
-            duration=command.duration,
-            display_end_time=display_end_time
-        )
-        await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
+        if conflict_task:
+            # Отправляем предупреждение вместо обычной конфирмации
+            from keyboards.inline_keyboards import get_conflict_resolution_keyboard
+            
+            warning_text = TaskMessages.conflict_warning(
+                new_task_content=command.content,
+                new_task_time=display_time,
+                old_task_content=conflict_task['content'],
+                old_task_time=datetime.fromtimestamp(conflict_task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+            )
+            
+            kb = get_conflict_resolution_keyboard(
+                old_task_id=conflict_task['id'],
+                new_task_id=new_task_id,
+                old_task_content=conflict_task['content'],
+                new_task_content=command.content
+            )
+            await message.answer(warning_text, reply_markup=kb, parse_mode="HTML")
+        else:
+            display_end_time = get_display_end_time(localized_dt, command.duration)
+            confirm_text = TaskMessages.task_created(
+                content=command.content,
+                display_time=display_time,
+                details=command.details,
+                duration=command.duration,
+                display_end_time=display_end_time
+            )
+            await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
     async def update(self, command: TaskActionSchema, message: Message):
         task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
@@ -254,3 +304,69 @@ class TaskActionsService:
             confirm_text = TaskMessages.tasks_completed_plural(completed_titles)
 
         await message.answer(confirm_text, parse_mode='HTML', reply_markup=get_main_kb())
+
+    async def resolve_conflict(self, action: str, message: Message, new_task_id: int = None, old_task_id: int = None):
+        """
+        Разрешает конфликт между новой (new_task_id) и старой (old_task_id) задачами.
+        """
+        # 1. Быстрый выход для игнора (не дергаем базу лишний раз)
+        if action == "ignore":
+            # Используем метод из TaskMessages, если он там есть, или пишем текст напрямую
+            await message.edit_text(
+                TaskMessages.conflict_ignore(),
+                parse_mode="HTML",
+                reply_markup=None
+            )
+            return
+
+        # 2. Получаем задачи из БД
+        new_task = await get_task_by_id(self.db, new_task_id)
+        old_task = await get_task_by_id(self.db, old_task_id)
+
+        if not new_task or not old_task:
+            await message.answer("⚠️ Ошибка: одна из конфликтующих задач не найдена.")
+            return
+
+        new_duration = new_task['duration'] if 'duration' in new_task.keys() and new_task['duration'] else 30
+        old_duration = old_task['duration'] if 'duration' in old_task.keys() and old_task['duration'] else 30
+
+        # 3. Определяем, кто двигается, а кто стоит на месте
+        if action == "move_old":
+            target_id, target_task, target_dur = old_task_id, old_task, old_duration
+        else:  # move_new
+            target_id, target_task, target_dur = new_task_id, new_task, new_duration
+
+        # 4. Единая логика сдвига для выбранной задачи
+        new_dt = await self._find_first_free_slot(target_dur, exclude_task_id=target_id)
+        new_ts = int(new_dt.timestamp())
+
+        await update_task(db=self.db, task_id=target_id, time_val=new_ts)
+        self.scheduler_service.update_scheduler_jobs(
+            task_id=target_id,
+            content=target_task['content'],
+            details=target_task['details'],
+            localized_dt=new_dt,
+            duration=target_dur
+        )
+
+        # 5. Формируем сообщение для UI
+        new_dt_str = new_dt.strftime("%Y-%m-%d %H:%M")
+
+        if action == "move_old":
+            display_new_time = datetime.fromtimestamp(new_task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+            msg_text = TaskMessages.conflict_resolved_move_old(
+                new_title=new_task['content'],
+                new_time=display_new_time,
+                old_title=old_task['content'],
+                old_new_time=new_dt_str
+            )
+        else:
+            display_old_time = datetime.fromtimestamp(old_task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+            msg_text = TaskMessages.conflict_resolved_move_new(
+                new_title=new_task['content'],
+                new_time=new_dt_str,
+                old_title=old_task['content'],
+                old_time=display_old_time
+            )
+
+        await message.edit_text(msg_text, parse_mode="HTML", reply_markup=None)

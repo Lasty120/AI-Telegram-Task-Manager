@@ -341,6 +341,77 @@ class TaskMessages:
         }
         return translations.get(lang, translations["ru"])
 
+    @classmethod
+    def conflict_warning(cls, new_task_content: str, new_task_time: str, old_task_content: str, old_task_time: str) -> str:
+        lang = user_lang.get()
+        escaped_new = hd.quote(new_task_content)
+        escaped_old = hd.quote(old_task_content)
+        translations = {
+            "ru": (
+                f"⚠️ <b>Внимание! Это время уже занято другой задачей.</b>\n\n"
+                f"Новая задача: <b>{escaped_new}</b> на {new_task_time}\n"
+                f"Конфликтует с: <b>{escaped_old}</b> на {old_task_time}\n\n"
+                f"Вы можете:\n"
+                f"1. Перенести старую задачу на ближайшее свободное время, а новую оставить на это время.\n"
+                f"2. Перенести новую задачу на ближайшее свободное время, а старую оставить.\n\n"
+                f"Или напишите текстом, например: <i>«перенести старую задачу на завтра, поставь новую на это время»</i>"
+            ),
+            "en": (
+                f"⚠️ <b>Warning! This time slot is already occupied by another task.</b>\n\n"
+                f"New task: <b>{escaped_new}</b> at {new_task_time}\n"
+                f"Conflicts with: <b>{escaped_old}</b> at {old_task_time}\n\n"
+                f"You can:\n"
+                f"1. Move the old task to the nearest free time slot, and keep the new task at this time.\n"
+                f"2. Move the new task to the nearest free time slot, and keep the old one.\n\n"
+                f"Or type in chat, e.g.: <i>\"move old task to tomorrow, put new task at this time\"</i>"
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def conflict_resolved_move_old(cls, new_title: str, new_time: str, old_title: str, old_new_time: str) -> str:
+        lang = user_lang.get()
+        escaped_new = hd.quote(new_title)
+        escaped_old = hd.quote(old_title)
+        translations = {
+            "ru": (
+                f"✅ Новая задача <b>{escaped_new}</b> успешно запланирована на выбранное время <b>{new_time}</b>.\n"
+                f"🔄 Старая задача <b>{escaped_old}</b> перенесена на ближайшее свободное время: <b>{old_new_time}</b>."
+            ),
+            "en": (
+                f"✅ New task <b>{escaped_new}</b> is successfully scheduled at the requested time <b>{new_time}</b>.\n"
+                f"🔄 Old task <b>{escaped_old}</b> has been moved to the nearest free time: <b>{old_new_time}</b>."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def conflict_resolved_move_new(cls, new_title: str, new_time: str, old_title: str, old_time: str) -> str:
+        lang = user_lang.get()
+        escaped_new = hd.quote(new_title)
+        escaped_old = hd.quote(old_title)
+        translations = {
+            "ru": (
+                f"✅ Старая задача <b>{escaped_old}</b> сохранена на <b>{old_time}</b>.\n"
+                f"🔄 Новая задача <b>{escaped_new}</b> перенесена на ближайшее свободное время: <b>{new_time}</b>."
+            ),
+            "en": (
+                f"✅ Old task <b>{escaped_old}</b> remains scheduled at <b>{old_time}</b>.\n"
+                f"🔄 New task <b>{escaped_new}</b> has been moved to the nearest free time: <b>{new_time}</b>."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+
+    @classmethod
+    def conflict_ignore(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "✅ Задачи оставлены параллельно на это время. Расписание сохранено.",
+            "en": "✅ Tasks were saved parallely by this time. Schedule were saved."
+        }
+        return translations.get(lang, translations["ru"])
+
 
 class AiMessages:
     @classmethod

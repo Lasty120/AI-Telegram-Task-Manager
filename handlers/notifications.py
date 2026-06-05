@@ -8,6 +8,7 @@ from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
 from config import TIMEZONE
+from services.tasks.actions import TaskActionsService
 
 router = Router()
 
@@ -123,3 +124,33 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         parse_mode="HTML",
         reply_markup=None
     )
+
+
+@router.callback_query(F.data.startswith("resolve_conflict:"))
+async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, user: Row):
+    parts = callback.data.split(":")
+
+    action = parts[1]
+
+    action_service = TaskActionsService(db=db, user=user, bot=callback.message.bot)
+
+    if action == "ignore":
+        await action_service.resolve_conflict(action=action, message=callback.message)
+        return
+
+    new_task_id = int(parts[2])
+    old_task_id = int(parts[3])
+
+    if len(parts) < 4:
+        await callback.answer("Некорректный запрос", show_alert=True)
+        return
+    
+    await action_service.resolve_conflict(
+        action=action,
+        new_task_id=new_task_id,
+        old_task_id=old_task_id,
+        message=callback.message
+    )
+    await callback.answer()
+
+

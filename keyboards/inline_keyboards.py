@@ -32,3 +32,35 @@ def get_task_action_keyboard(task_id: int):
     return builder.as_markup()
 
 
+def get_conflict_resolution_keyboard(old_task_id: int, new_task_id: int, old_task_content: str, new_task_content: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    lang = user_lang.get()
+
+
+    # Сокращение названия задачи если она слишком длинная
+    max_len = 20
+    old_short = old_task_content[:max_len] + "..." if len(old_task_content) > max_len else old_task_content
+    new_short = new_task_content[:max_len] + "..." if len(new_task_content) > max_len else new_task_content
+
+    translations = {
+        "ru": {
+            "move_old": f"Перенести \"{old_short}\"",
+            "move_new": f"Перенести \"{new_short}\"",
+            "ignore": "Игнорировать конфликт"
+        },
+        "en": {
+            "move_old": f"Move \"{old_short}\"",
+            "move_new": f"Move \"{new_short}\"",
+            "ignore": "Ignore the conflict"
+        }
+    }
+
+    t = translations.get(lang, translations["ru"])
+    builder.button(text=t["move_old"], callback_data=f"resolve_conflict:move_old:{new_task_id}:{old_task_id}")
+    builder.button(text=t["move_new"], callback_data=f"resolve_conflict:move_new:{new_task_id}:{old_task_id}")
+    builder.button(text=t["ignore"], callback_data=f"resolve_conflict:ignore")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+
