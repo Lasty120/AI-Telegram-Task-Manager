@@ -30,14 +30,14 @@ class StartMessages:
                 "You don't need to press complex buttons — just <b>text me</b> or send a <b>voice message</b>, and I will understand and organize everything myself.\n\n"
                 "🛠 <b>What I can do:</b>\n\n"
                 "📝 <b>Create tasks:</b>\n"
-                "• <i>“Remind me to call mom tomorrow at 18:00”</i>\n"
-                "• <i>“Learn the word Apple”</i>\n\n"
+                "• <i>\"Remind me to call mom tomorrow at 18:00\"</i>\n"
+                "• <i>\"Learn the word Apple\"</i>\n\n"
                 "🔄 <b>Change plans:</b>\n"
-                "• <i>“Move call with Vasya to 19:30”</i>\n\n"
+                "• <i>\"Move call with Vasya to 19:30\"</i>\n\n"
                 "✅ <b>Mark as completed:</b>\n"
-                "• <i>“I bought bread, delete this task”</i>\n\n"
+                "• <i>\"I bought bread, delete this task\"</i>\n\n"
                 "🔍 <b>Search plans:</b>\n"
-                "• <i>“What are my plans for the weekend?”</i>\n\n"
+                "• <i>\"What are my plans for the weekend?\"</i>\n\n"
                 "👇 Use the buttons in the menu below to quickly view your active or completed tasks."
             )
         }
@@ -112,20 +112,25 @@ class TaskMessages:
     def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, duration: int = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            text = f"✅ Task created: <b>{escaped_content}</b> for {display_time}\n"
-            if display_end_time:
-                text += f"Until {display_end_time} (Duration {duration} minutes)"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n📖 Details: <i>{escaped_details}</i>"
-        else:
-            text = f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}\n"
-            if display_end_time:
-                text += f"До {display_end_time} (Длительность {duration} минут)"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n📖 Детали: <i>{escaped_details}</i>"
+        translations = {
+            "ru": {
+                "header": f"✅ Создана задача: <b>{escaped_content}</b> на {display_time}\n",
+                "until": f"До {display_end_time} (Длительность {duration} минут)",
+                "details_label": "📖 Детали",
+            },
+            "en": {
+                "header": f"✅ Task created: <b>{escaped_content}</b> for {display_time}\n",
+                "until": f"Until {display_end_time} (Duration {duration} minutes)",
+                "details_label": "📖 Details",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        text = t["header"]
+        if display_end_time:
+            text += t["until"]
+        if details:
+            escaped_details = hd.quote(details)
+            text += f"\n{t['details_label']}: <i>{escaped_details}</i>"
         return text
 
     @classmethod
@@ -168,20 +173,25 @@ class TaskMessages:
     def task_updated(cls, content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            text = f"🔄 Task updated: <b>{escaped_content}</b> for {display_time}\n"
-            if display_end_time:
-                text += f"Until {display_end_time} (duration {duration} minutes)"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n📖 Details: <i>{escaped_details}</i>"
-        else:
-            text = f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}\n"
-            if display_end_time:
-                text += f"До {display_end_time} (длительность {duration} минут)"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n📖 Детали: <i>{escaped_details}</i>"
+        translations = {
+            "ru": {
+                "header": f"🔄 Задача обновлена: <b>{escaped_content}</b> на {display_time}\n",
+                "until": f"До {display_end_time} (длительность {duration} минут)",
+                "details_label": "📖 Детали",
+            },
+            "en": {
+                "header": f"🔄 Task updated: <b>{escaped_content}</b> for {display_time}\n",
+                "until": f"Until {display_end_time} (duration {duration} minutes)",
+                "details_label": "📖 Details",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        text = t["header"]
+        if display_end_time:
+            text += t["until"]
+        if details:
+            escaped_details = hd.quote(details)
+            text += f"\n{t['details_label']}: <i>{escaped_details}</i>"
         return text
 
     @classmethod
@@ -206,10 +216,18 @@ class TaskMessages:
     def search_results(cls, query: str, tasks: list, tz) -> str:
         lang = user_lang.get()
         escaped_query = hd.quote(query)
-        if lang == "en":
-            response_lines = [f"🔍 <b>Search results for '{escaped_query}':</b>", ""]
-        else:
-            response_lines = [f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>", ""]
+        translations = {
+            "ru": {
+                "header": f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>",
+                "until": "до",
+            },
+            "en": {
+                "header": f"🔍 <b>Search results for '{escaped_query}':</b>",
+                "until": "until",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        response_lines = [t["header"], ""]
 
         for index, task in enumerate(tasks, 1):
             task_datetime = datetime.fromtimestamp(task['time'], tz)
@@ -224,10 +242,7 @@ class TaskMessages:
                     formatted_end = end_datetime.strftime('%H:%M')
                 else:
                     formatted_end = end_datetime.strftime('%d.%m %H:%M')
-                if lang == "en":
-                    task_line += f" — ⏰ {formatted_time} (until {formatted_end})"
-                else:
-                    task_line += f" — ⏰ {formatted_time} (до {formatted_end})"
+                task_line += f" — ⏰ {formatted_time} ({t['until']} {formatted_end})"
             else:
                 task_line += f" — ⏰ {formatted_time}"
 
@@ -259,59 +274,72 @@ class TaskMessages:
     def task_completed(cls, content: str) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            return f"✅ Task completed:\n <b>{escaped_content}</b>"
-        else:
-            return f"✅ Задача выполнена:\n <b>{escaped_content}</b>"
+        translations = {
+            "ru": f"✅ Задача выполнена:\n <b>{escaped_content}</b>",
+            "en": f"✅ Task completed:\n <b>{escaped_content}</b>",
+        }
+        return translations.get(lang, translations["ru"])
 
     @classmethod
     def tasks_completed_plural(cls, completed_titles: list) -> str:
         lang = user_lang.get()
         tasks_list_str = ", ".join(f"\"{title}\"" for title in completed_titles)
-        if lang == "en":
-            return f"✅ Tasks completed: {tasks_list_str}"
-        else:
-            return f"✅ Задачи выполнены: {tasks_list_str}"
+        translations = {
+            "ru": f"✅ Задачи выполнены: {tasks_list_str}",
+            "en": f"✅ Tasks completed: {tasks_list_str}",
+        }
+        return translations.get(lang, translations["ru"])
 
     @classmethod
     def task_notification(cls, content: str, details: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            text = f"🔔 <b>Reminder:</b>\n{escaped_content}"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n\n📝 <b>Details:</b>\n<i>{escaped_details}</i>"
-        else:
-            text = f"🔔 <b>Напоминание:</b>\n{escaped_content}"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
+        translations = {
+            "ru": {
+                "header": f"🔔 <b>Напоминание:</b>\n{escaped_content}",
+                "details_label": "📝 <b>Детали:</b>",
+            },
+            "en": {
+                "header": f"🔔 <b>Reminder:</b>\n{escaped_content}",
+                "details_label": "📝 <b>Details:</b>",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        text = t["header"]
+        if details:
+            escaped_details = hd.quote(details)
+            text += f"\n\n{t['details_label']}\n<i>{escaped_details}</i>"
         return text
 
     @classmethod
     def task_end_notification(cls, content: str, details: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            text = f"🏁 <b>Task completed:</b>\n{escaped_content}"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n\n📝 <b>Details:</b>\n<i>{escaped_details}</i>"
-        else:
-            text = f"🏁 <b>Задача завершена:</b>\n{escaped_content}"
-            if details:
-                escaped_details = hd.quote(details)
-                text += f"\n\n📝 <b>Детали:</b>\n<i>{escaped_details}</i>"
+        translations = {
+            "ru": {
+                "header": f"🏁 <b>Задача завершена:</b>\n{escaped_content}",
+                "details_label": "📝 <b>Детали:</b>",
+            },
+            "en": {
+                "header": f"🏁 <b>Task completed:</b>\n{escaped_content}",
+                "details_label": "📝 <b>Details:</b>",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        text = t["header"]
+        if details:
+            escaped_details = hd.quote(details)
+            text += f"\n\n{t['details_label']}\n<i>{escaped_details}</i>"
         return text
 
     @classmethod
     def task_delay(cls, new_dt: str) -> str:
         lang = user_lang.get()
-        if lang == "en":
-            return f"\n\n⏰ <b>Delayed by 15 minutes</b> (until {new_dt})"
-        else:
-            return f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})"
+        translations = {
+            "ru": f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})",
+            "en": f"\n\n⏰ <b>Delayed by 15 minutes</b> (until {new_dt})",
+        }
+        return translations.get(lang, translations["ru"])
 
 
 class AiMessages:
@@ -354,21 +382,29 @@ class AiMessages:
     @classmethod
     def execution_error(cls, error_detail: str | None) -> str:
         lang = user_lang.get()
-        if lang == "en":
-            detail = hd.quote(error_detail) if error_detail else "Action cannot be performed (possibly date is in the past)."
-            return f"⚠️ Error: {detail}"
-        else:
-            detail = hd.quote(error_detail) if error_detail else "Действие не может быть выполнено (возможно, указана дата в прошлом)."
-            return f"⚠️ Ошибка: {detail}"
+        translations = {
+            "ru": {
+                "prefix": "⚠️ Ошибка:",
+                "default": "Действие не может быть выполнено (возможно, указана дата в прошлом).",
+            },
+            "en": {
+                "prefix": "⚠️ Error:",
+                "default": "Action cannot be performed (possibly date is in the past).",
+            },
+        }
+        t = translations.get(lang, translations["ru"])
+        detail = hd.quote(error_detail) if error_detail else t["default"]
+        return f"{t['prefix']} {detail}"
 
     @classmethod
     def unknown_action(cls, content: str) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
-        if lang == "en":
-            return f"🤷‍♂️ Did not completely understand what to do with '<b>{escaped_content}</b>'."
-        else:
-            return f"🤷‍♂️ Не совсем понял, что нужно сделать с '<b>{escaped_content}</b>'."
+        translations = {
+            "ru": f"🤷‍♂️ Не совсем понял, что нужно сделать с '<b>{escaped_content}</b>'.",
+            "en": f"🤷‍♂️ Did not completely understand what to do with '<b>{escaped_content}</b>'.",
+        }
+        return translations.get(lang, translations["ru"])
 
 
 class LangMessages:

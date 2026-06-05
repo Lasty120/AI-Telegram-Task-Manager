@@ -15,7 +15,7 @@ from messages import TaskMessages
 router = Router()
 
 
-@router.message(F.text == "Мои задачи")
+@router.message(F.text.in_(["Мои задачи", "My tasks"]))
 async def get_my_tasks_handler(
         message: Message,
         db: Connection,
@@ -33,7 +33,7 @@ async def get_my_tasks_handler(
     await message.answer(response_text, parse_mode='HTML')
 
 
-@router.message(F.text == "Мои выполненные задачи")
+@router.message(F.text.in_(["Мои выполненные задачи", "My completed tasks"]))
 async def get_my_completed_tasks_handler(
         message: Message,
         db: Connection,
