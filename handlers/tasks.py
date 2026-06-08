@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message, CallbackQuery
 from aiosqlite import Connection, Row
 
@@ -19,9 +20,15 @@ from config import TIMEZONE
 router = Router()
 
 
-async def answer_with_pages_kb(limit: int, message: Message, response_text: str, total_count: int):
+async def answer_with_pages_kb(
+        limit: int,
+        message: Message,
+        response_text: str,
+        total_count: int,
+        prefix: str
+):
     """
-    Отвечает с клавиатурой страниц
+    Выводит все таски, добавляя пагинацию если тасков больше лимита
     """
     if total_count > limit:
         lang = user_lang.get()
@@ -30,7 +37,7 @@ async def answer_with_pages_kb(limit: int, message: Message, response_text: str,
         total_pages = (total_count + limit - 1) // limit
         response_text += f"\n\n📖 <i>{page_word} 1 {from_word} {total_pages}</i>"
 
-    kb = get_pagination_keyboard(total_count, 1, limit, "page_completed")
+    kb = get_pagination_keyboard(total_count, 1, limit, prefix)
 
     await message.answer(response_text, parse_mode='HTML', reply_markup=kb)
 
@@ -55,7 +62,7 @@ async def get_my_tasks_handler(
         header_text=TaskMessages.tasks_header()
     )
 
-    await answer_with_pages_kb(limit, message, response_text, total_count)
+    await answer_with_pages_kb(limit, message, response_text, total_count, "page_active")
 
 
 @router.callback_query(F.data.startswith("page_active:"))
@@ -83,10 +90,12 @@ async def page_active_callback(callback: CallbackQuery, db: Connection, user: Ro
     response_text += f"\n\n📖 <i>{page_word} {page} {from_word} {total_pages}</i>"
 
     kb = get_pagination_keyboard(total_count, page, limit, "page_active")
-
-    await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
     await callback.answer()
 
+    try:
+        await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
+    except TelegramBadRequest:
+        return
 
 @router.message(F.text.in_(["Мои выполненные задачи", "My completed tasks"]))
 async def get_my_completed_tasks_handler(
@@ -108,7 +117,7 @@ async def get_my_completed_tasks_handler(
         header_text=TaskMessages.completed_tasks_header()
     )
 
-    await answer_with_pages_kb(limit, message, response_text, total_count)
+    await answer_with_pages_kb(limit, message, response_text, total_count, "page_completed")
 
 
 
@@ -137,9 +146,12 @@ async def page_completed_callback(callback: CallbackQuery, db: Connection, user:
     response_text += f"\n\n📖 <i>{page_word} {page} {from_word} {total_pages}</i>"
 
     kb = get_pagination_keyboard(total_count, page, limit, "page_completed")
-
-    await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
     await callback.answer()
+
+    try:
+        await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
+    except TelegramBadRequest:
+        return
 
 
 @router.callback_query(F.data.startswith("page_select:"))
@@ -181,5 +193,8 @@ async def page_select_callback(callback: CallbackQuery, db: Connection, user: Ro
 
     kb = get_pagination_keyboard(total_count, page, limit, "page_select")
 
-    await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
     await callback.answer()
+    try:
+        await callback.message.edit_text(response_text, parse_mode='HTML', reply_markup=kb)
+    except TelegramBadRequest:
+        return
