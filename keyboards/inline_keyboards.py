@@ -4,6 +4,7 @@ from aiogram.types import (
                            )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from utils.context import user_lang
+import math
 
 MY_TASKS = InlineKeyboardButton(text="Мои задачи",callback_data="my_tasks")
 
@@ -60,6 +61,25 @@ def get_conflict_resolution_keyboard(old_task_id: int, new_task_id: int, old_tas
     builder.button(text=t["move_new"], callback_data=f"resolve_conflict:move_new:{new_task_id}:{old_task_id}")
     builder.button(text=t["ignore"], callback_data=f"resolve_conflict:ignore")
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_pagination_keyboard(total_count: int, current_page: int, limit: int, prefix: str) -> InlineKeyboardMarkup | None:
+    """
+    Создает инлайн-клавиатуру для постраничного перелистывания задач.
+    Отображает номера страниц, при этом текущая страница выделена точками.
+    """
+    if total_count <= limit:
+        return None
+
+    total_pages = math.ceil(total_count / limit)
+    builder = InlineKeyboardBuilder()
+
+    for page in range(1, total_pages + 1):
+        text = f"• {page} •" if page == current_page else str(page)
+        builder.button(text=text, callback_data=f"{prefix}:{page}")
+
+    builder.adjust(5)
     return builder.as_markup()
 
 

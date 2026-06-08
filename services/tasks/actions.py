@@ -5,8 +5,10 @@ from aiosqlite import Connection, Row
 
 from messages import TaskMessages
 from database.schemas import TaskActionSchema
-from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, get_user_tasks
+from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, get_user_tasks, save_user_search
 from keyboards.reply_keyboards import get_main_kb
+from keyboards.inline_keyboards import get_pagination_keyboard
+from utils.context import user_lang
 from config import TIMEZONE
 from services.task_scheduler import TaskSchedulerService
 from utils.formatters import get_display_end_time
@@ -234,12 +236,33 @@ class TaskActionsService:
 
 
     async def select(self, command: TaskActionSchema, message: Message):
+        """
+        Обрабатывает команду поиска задач (CRUD select).
+        Кэширует найденные ID задач и показывает первую страницу результатов с пагинацией.
+        """
         if not command.task_ids:
             await message.answer(TaskMessages.search_empty())
             return
 
-        # Запрашиваем найденные задачи из БД
-        tasks = await get_tasks_by_ids(db=self.db, task_ids=command.task_ids, user_id=self.user["id"])
+        # Сохраняем результаты поиска для пагинации
+        await save_user_search(
+            db=self.db,
+            user_id=self.user["id"],
+            task_ids=command.task_ids,
+            query=command.content or "поиск"
+        )
+
+        limit = 10
+        total_count = len(command.task_ids)
+
+        # Запрашиваем первую страницу найденных задач из БД
+        tasks = await get_tasks_by_ids(
+            db=self.db,
+            task_ids=command.task_ids,
+            user_id=self.user["id"],
+            limit=limit,
+            offset=0
+        )
 
         if not tasks:
             await message.answer(TaskMessages.search_not_found())
@@ -250,7 +273,17 @@ class TaskActionsService:
             tasks=tasks,
             tz=self.tz
         )
-        await message.answer(response_text, parse_mode='HTML', reply_markup=get_main_kb())
+
+        if total_count > limit:
+            lang = user_lang.get()
+            page_word = "Page" if lang == "en" else "Страница"
+            from_word = "of" if lang == "en" else "из"
+            total_pages = (total_count + limit - 1) // limit
+            response_text += f"\n\n📖 <i>{page_word} 1 {from_word} {total_pages}</i>"
+
+        kb = get_pagination_keyboard(total_count, 1, limit, "page_select")
+
+        await message.answer(response_text, parse_mode='HTML', reply_markup=kb or get_main_kb())
 
 
     async def delete(self, command: TaskActionSchema, message: Message):

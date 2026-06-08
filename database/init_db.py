@@ -21,6 +21,14 @@ async def init_db(db_path: str):
             duration INTEGER,
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
+
+        -- Таблица для кэширования последних результатов поиска (выбора) пользователя с целью пагинации
+        CREATE TABLE IF NOT EXISTS user_searches (
+            user_id INTEGER PRIMARY KEY,
+            task_ids TEXT NOT NULL,
+            query TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
         """)
         
         # Безопасная автомиграция: добавляем колонки, если их еще нет

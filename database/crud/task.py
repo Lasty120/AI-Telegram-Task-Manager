@@ -26,26 +26,74 @@ async def create_task(
     return last_id
 
 
-async def get_user_tasks(db: aiosqlite.Connection, user_id: int) -> list[aiosqlite.Row]:
+async def get_user_tasks(
+    db: aiosqlite.Connection, 
+    user_id: int, 
+    limit: int = None, 
+    offset: int = None
+) -> list[aiosqlite.Row]:
     """
-    Получает все активные задачи конкретного пользователя, отсортированные по времени.
+    Получает активные задачи конкретного пользователя, отсортированные по времени.
+    Поддерживает пагинацию с помощью параметров limit и offset.
+    """
+    query = "SELECT * FROM tasks WHERE user_id = ? AND status = ? ORDER BY time ASC"
+    params = [user_id, TaskStatus.ACTIVE.value]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    if offset is not None:
+        query += " OFFSET ?"
+        params.append(offset)
+        
+    async with db.execute(query, tuple(params)) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_user_tasks_count(db: aiosqlite.Connection, user_id: int) -> int:
+    """
+    Возвращает общее количество активных задач пользователя (для подсчета количества страниц).
     """
     async with db.execute(
-        "SELECT * FROM tasks WHERE user_id = ? AND status = ? ORDER BY time ASC",
+        "SELECT COUNT(*) FROM tasks WHERE user_id = ? AND status = ?",
         (user_id, TaskStatus.ACTIVE.value)
     ) as cursor:
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+
+async def get_user_completed_tasks(
+    db: aiosqlite.Connection, 
+    user_id: int, 
+    limit: int = None, 
+    offset: int = None
+) -> list[aiosqlite.Row]:
+    """
+    Получает выполненные задачи конкретного пользователя, отсортированные по времени.
+    Поддерживает пагинацию с помощью параметров limit и offset.
+    """
+    query = "SELECT * FROM tasks WHERE user_id = ? AND status = ? ORDER BY time ASC"
+    params = [user_id, TaskStatus.COMPLETED.value]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    if offset is not None:
+        query += " OFFSET ?"
+        params.append(offset)
+        
+    async with db.execute(query, tuple(params)) as cursor:
         return await cursor.fetchall()
 
 
-async def get_user_completed_tasks(db: aiosqlite.Connection, user_id: int) -> list[aiosqlite.Row]:
+async def get_user_completed_tasks_count(db: aiosqlite.Connection, user_id: int) -> int:
     """
-    Получает все выполненные задачи конкретного пользователя, отсортированные по времени.
+    Возвращает общее количество выполненных задач пользователя (для подсчета количества страниц).
     """
     async with db.execute(
-        "SELECT * FROM tasks WHERE user_id = ? AND status = ? ORDER BY time ASC",
+        "SELECT COUNT(*) FROM tasks WHERE user_id = ? AND status = ?",
         (user_id, TaskStatus.COMPLETED.value)
     ) as cursor:
-        return await cursor.fetchall()
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
 
 async def get_due_tasks(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
@@ -78,14 +126,58 @@ async def get_task_by_id(db: aiosqlite.Connection, task_id: int) -> aiosqlite.Ro
 async def get_tasks_by_ids(
         db: aiosqlite.Connection,
         task_ids: list[int],
-        user_id: int
+        user_id: int,
+        limit: int = None,
+        offset: int = None
 ) -> list[aiosqlite.Row]:
-        placeholders = ', '.join('?' for _ in task_ids)
-        query = f"SELECT * FROM tasks WHERE id IN ({placeholders}) AND user_id = ? ORDER BY time ASC"
+    """
+    Получает список задач по их ID для конкретного пользователя с поддержкой лимита и смещения.
+    """
+    if not task_ids:
+        return []
+    placeholders = ', '.join('?' for _ in task_ids)
+    query = f"SELECT * FROM tasks WHERE id IN ({placeholders}) AND user_id = ? ORDER BY time ASC"
+    params = list(task_ids) + [user_id]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    if offset is not None:
+        query += " OFFSET ?"
+        params.append(offset)
 
-        async with db.execute(query, (*task_ids, user_id)) as cursor:
-            tasks = await cursor.fetchall()
-        return tasks
+    async with db.execute(query, tuple(params)) as cursor:
+        tasks = await cursor.fetchall()
+    return tasks
+
+
+async def save_user_search(db: aiosqlite.Connection, user_id: int, task_ids: list[int], query: str):
+    """
+    Кэширует список найденных ID задач для пользователя для последующей постраничной навигации.
+    """
+    task_ids_str = ",".join(map(str, task_ids))
+    await db.execute(
+        """
+        INSERT OR REPLACE INTO user_searches (user_id, task_ids, query)
+        VALUES (?, ?, ?)
+        """,
+        (user_id, task_ids_str, query)
+    )
+    await db.commit()
+
+
+async def get_user_search(db: aiosqlite.Connection, user_id: int) -> tuple[list[int], str] | None:
+    """
+    Извлекает из кэша сохраненные ID задач и исходный поисковый запрос пользователя.
+    """
+    async with db.execute(
+        "SELECT task_ids, query FROM user_searches WHERE user_id = ?",
+        (user_id,)
+    ) as cursor:
+        row = await cursor.fetchone()
+        if row:
+            task_ids = [int(x) for x in row[0].split(",") if x]
+            return task_ids, row[1]
+        return None
 
 
 async def update_task(
