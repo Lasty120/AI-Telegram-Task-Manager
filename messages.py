@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from aiogram.utils.markdown import html_decoration as hd
 from utils.context import user_lang
+from utils.formatters import format_tasks_list
 
 
 class StartMessages:
@@ -219,38 +220,17 @@ class TaskMessages:
         translations = {
             "ru": {
                 "header": f"🔍 <b>Результаты поиска по запросу '{escaped_query}':</b>",
-                "until": "до",
             },
             "en": {
                 "header": f"🔍 <b>Search results for '{escaped_query}':</b>",
-                "until": "until",
             },
         }
         t = translations.get(lang, translations["ru"])
-        response_lines = [t["header"], ""]
+        
 
-        for index, task in enumerate(tasks, 1):
-            task_datetime = datetime.fromtimestamp(task['time'], tz)
-            formatted_time = task_datetime.strftime('%d.%m %H:%M')
-            escaped_content = hd.quote(task['content'])
-
-            task_line = f"{index}. <b>{escaped_content}</b>"
-
-            if 'duration' in task.keys() and task['duration']:
-                end_datetime = task_datetime + timedelta(minutes=task['duration'])
-                if end_datetime.date() == task_datetime.date():
-                    formatted_end = end_datetime.strftime('%H:%M')
-                else:
-                    formatted_end = end_datetime.strftime('%d.%m %H:%M')
-                task_line += f" — ⏰ {formatted_time} ({t['until']} {formatted_end})"
-            else:
-                task_line += f" — ⏰ {formatted_time}"
-
-            if task['details']:
-                escaped_details = hd.quote(task['details'])
-                task_line += f"\n   <i>{escaped_details}</i>"
-            response_lines.append(task_line)
-        return "\n".join(response_lines)
+        formatted_list = format_tasks_list(tasks, tz, lang)
+        
+        return f"{t['header']}\n\n{formatted_list}"
 
     @classmethod
     def task_delete_id_missing(cls) -> str:

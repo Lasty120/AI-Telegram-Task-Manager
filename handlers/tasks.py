@@ -1,14 +1,10 @@
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 
-import re
-from datetime import datetime
 from aiosqlite import Connection, Row
 
 
-from database.crud.task import create_task, get_user_tasks, get_user_completed_tasks
+from database.crud.task import get_user_tasks, get_user_completed_tasks
 from utils.formatters import format_tasks_message
 from messages import TaskMessages
 
@@ -29,7 +25,6 @@ async def get_my_tasks_handler(
         header_text=TaskMessages.tasks_header()
     )
 
-    # 4. Отправляем пользователю
     await message.answer(response_text, parse_mode='HTML')
 
 
@@ -48,5 +43,4 @@ async def get_my_completed_tasks_handler(
         header_text=TaskMessages.completed_tasks_header()
     )
 
-    # 4. Отправляем пользователю
     await message.answer(response_text, parse_mode='HTML')

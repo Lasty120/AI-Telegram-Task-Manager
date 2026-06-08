@@ -1,9 +1,10 @@
 ﻿from aiogram import Router, F
 from  aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup
 
 from aiosqlite import Row, Connection
 from  database.crud.user import change_language
+from keyboards.reply_keyboards import get_main_kb
 from messages import LangMessages
 
 router = Router()
@@ -21,4 +22,5 @@ async def change_language_handler(
     )
     await message.answer(
         text=LangMessages.lang_successfully_changed(new_lang=new_lang),
+        reply_markup=get_main_kb()
     )
