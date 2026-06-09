@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+
 from aiogram.utils.markdown import html_decoration as hd
 from utils.context import user_lang
 from utils.formatters import format_tasks_list
@@ -129,7 +129,7 @@ class TaskMessages:
         t = translations.get(lang, translations["ru"])
         
         from utils.formatters import format_importance
-        imp_str = format_importance(importance.value, lang)
+        imp_str = format_importance(importance, lang)
         
         text = t["header"]
         if imp_str:

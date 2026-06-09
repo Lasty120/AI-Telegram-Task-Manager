@@ -113,7 +113,7 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         except Exception:
             pass
 
-    await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=Tru)
+    await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=True)
 
     # Обновляем сообщение в чате
     text = TaskMessages.task_notification(task['content'], task['details'])

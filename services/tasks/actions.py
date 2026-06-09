@@ -12,6 +12,7 @@ from utils.context import user_lang
 from config import TIMEZONE
 from services.task_scheduler import TaskSchedulerService
 from utils.formatters import get_display_end_time
+from utils.action_result import ActionResult
 
 
 class TaskActionsService:
@@ -85,31 +86,23 @@ class TaskActionsService:
                 return task
         return None
 
-
-
-
-
-    async def create(self, command: TaskActionSchema, message: Message):
+    async def create(self, command: TaskActionSchema) -> ActionResult:
         if not command.time:
-            # Находим первый свободный временной слот в расписании
             localized_dt = await self._find_first_free_slot(command.duration)
             task_timestamp = int(localized_dt.timestamp())
             display_time = localized_dt.strftime("%Y-%m-%d %H:%M")
         else:
-            # Парсим время, присланное ИИ
             try:
                 naive_dt = datetime.strptime(command.time, "%Y-%m-%d %H:%M")
                 localized_dt = self.tz.localize(naive_dt)
                 task_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer(TaskMessages.invalid_time_format())
-                return
+                return ActionResult(text=TaskMessages.invalid_time_format())
 
-        # 1. Сохраняем в БД и получаем ID новой задачи
         new_task_id = await create_task(
             db=self.db,
-            user_id=self.user['id'],  # Обращение как к Row (по ключу)
+            user_id=self.user['id'],
             time=task_timestamp,
             content=command.content,
             details=command.details,
@@ -117,7 +110,6 @@ class TaskActionsService:
             importance=command.importance,
         )
 
-        # 2. Добавляем в планировщик на лету
         self.scheduler_service.update_scheduler_jobs(
             task_id=new_task_id,
             content=command.content,
@@ -127,29 +119,30 @@ class TaskActionsService:
             importance=command.importance,
         )
 
-        # 3. Проверяем на конфликты с другими активными задачами (исключая саму новую задачу)
         conflict_task = None
         if command.time:
-            conflict_task = await self._check_conflict(task_timestamp, command.duration, exclude_task_id=new_task_id)
+            conflict_task = await self._check_conflict(
+                task_timestamp, command.duration, exclude_task_id=new_task_id
+            )
 
         if conflict_task:
-            # Отправляем предупреждение вместо обычной конфирмации
             from keyboards.inline_keyboards import get_conflict_resolution_keyboard
-            
             warning_text = TaskMessages.conflict_warning(
                 new_task_content=command.content,
                 new_task_time=display_time,
                 old_task_content=conflict_task['content'],
-                old_task_time=datetime.fromtimestamp(conflict_task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+                old_task_time=datetime.fromtimestamp(
+                    conflict_task['time'], self.tz
+                ).strftime("%Y-%m-%d %H:%M")
             )
-            
             kb = get_conflict_resolution_keyboard(
                 old_task_id=conflict_task['id'],
                 new_task_id=new_task_id,
                 old_task_content=conflict_task['content'],
                 new_task_content=command.content
             )
-            await message.answer(warning_text, reply_markup=kb, parse_mode="HTML")
+            # Конфликт — всегда отдельно, потому что у него своя инлайн-клавиатура
+            return ActionResult(text=warning_text, keyboard=kb, send_separately=True)
         else:
             display_end_time = get_display_end_time(localized_dt, command.duration)
             confirm_text = TaskMessages.task_created(
@@ -160,36 +153,25 @@ class TaskActionsService:
                 display_end_time=display_end_time,
                 importance=command.importance,
             )
-            await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
+            return ActionResult(text=confirm_text, task_time=command.time)
 
-    async def update(self, command: TaskActionSchema, message: Message):
+    async def update(self, command: TaskActionSchema) -> ActionResult:
         task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
         if not task_id:
-            await message.answer(TaskMessages.task_update_id_missing())
-            return
+            return ActionResult(text=TaskMessages.task_update_id_missing())
 
-        # 1. Получаем задачу из базы данных
         task = await get_task_by_id(self.db, task_id)
         if not task:
-            await message.answer(TaskMessages.task_not_found())
-            return
+            return ActionResult(text=TaskMessages.task_not_found())
 
-        # Проверяем права: принадлежит ли задача текущему пользователю
         if task['user_id'] != self.user['id']:
-            await message.answer(TaskMessages.task_update_access_denied())
-            return
+            return ActionResult(text=TaskMessages.task_update_access_denied())
 
-        # 2. Определяем обновленные значения
-        # Контент
         new_content = command.content if command.content is not None else task['content']
-        
-        # Детали
         new_details = command.details if command.details is not None else task['details']
-        
-        # Время
         new_time_timestamp = task['time']
         display_time = datetime.fromtimestamp(task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
-        
+
         if command.time is not None:
             try:
                 naive_dt = datetime.strptime(command.time, "%Y-%m-%d %H:%M")
@@ -197,61 +179,40 @@ class TaskActionsService:
                 new_time_timestamp = int(localized_dt.timestamp())
                 display_time = command.time
             except Exception:
-                await message.answer(TaskMessages.invalid_update_time_format())
-                return
+                return ActionResult(text=TaskMessages.invalid_update_time_format())
         else:
             localized_dt = datetime.fromtimestamp(new_time_timestamp, self.tz)
 
-        # Длительность
-        new_duration = command.duration if command.duration is not None else (task['duration'] if 'duration' in task.keys() else None)
-
-        # Важность
-        new_importance = command.importance if command.importance is not None else (task['importance'] if 'importance' in task.keys() else None)
-
-        # 3. Сохраняем изменения в БД
-        await update_task(
-            db=self.db,
-            task_id=task_id,
-            content=new_content,
-            details=new_details,
-            time_val=new_time_timestamp,
-            duration=new_duration,
-            importance=new_importance,
+        new_duration = command.duration if command.duration is not None else (
+            task['duration'] if 'duration' in task.keys() else None
+        )
+        new_importance = command.importance if command.importance is not None else (
+            task['importance'] if 'importance' in task.keys() else None
         )
 
-        # 4. Обновляем планировщик
+        await update_task(
+            db=self.db, task_id=task_id,
+            content=new_content, details=new_details,
+            time_val=new_time_timestamp, duration=new_duration, importance=new_importance,
+        )
         self.scheduler_service.update_scheduler_jobs(
-            task_id=task_id,
-            content=new_content,
-            details=new_details,
-            localized_dt=localized_dt,
-            duration=new_duration,
-            importance=new_importance,
+            task_id=task_id, content=new_content, details=new_details,
+            localized_dt=localized_dt, duration=new_duration, importance=new_importance,
         )
 
         display_end_time = get_display_end_time(localized_dt, new_duration)
-
         confirm_text = TaskMessages.task_updated(
-            content=new_content,
-            display_time=display_time,
-            details=new_details,
-            duration=new_duration,
-            display_end_time=display_end_time,
-            importance=new_importance,
+            content=new_content, display_time=display_time,
+            details=new_details, duration=new_duration,
+            display_end_time=display_end_time, importance=new_importance,
         )
-        await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
+        return ActionResult(text=confirm_text, task_time=command.time)
 
 
-    async def select(self, command: TaskActionSchema, message: Message):
-        """
-        Обрабатывает команду поиска задач (CRUD select).
-        Кэширует найденные ID задач и показывает первую страницу результатов с пагинацией.
-        """
+    async def select(self, command: TaskActionSchema) -> ActionResult:
         if not command.task_ids:
-            await message.answer(TaskMessages.search_empty())
-            return
+            return ActionResult(text=TaskMessages.search_empty())
 
-        # Сохраняем результаты поиска для пагинации
         await save_user_search(
             db=self.db,
             user_id=self.user["id"],
@@ -262,23 +223,16 @@ class TaskActionsService:
         limit = 10
         total_count = len(command.task_ids)
 
-        # Запрашиваем первую страницу найденных задач из БД
         tasks = await get_tasks_by_ids(
-            db=self.db,
-            task_ids=command.task_ids,
-            user_id=self.user["id"],
-            limit=limit,
-            offset=0
+            db=self.db, task_ids=command.task_ids,
+            user_id=self.user["id"], limit=limit, offset=0
         )
 
         if not tasks:
-            await message.answer(TaskMessages.search_not_found())
-            return
+            return ActionResult(text=TaskMessages.search_not_found(), task_time=command['time'])
 
         response_text = TaskMessages.search_results(
-            query=command.content or "поиск",
-            tasks=tasks,
-            tz=self.tz
+            query=command.content or "поиск", tasks=tasks, tz=self.tz
         )
 
         if total_count > limit:
@@ -290,11 +244,15 @@ class TaskActionsService:
 
         kb = get_pagination_keyboard(total_count, 1, limit, "page_select")
 
-        await message.answer(response_text, parse_mode='HTML', reply_markup=kb or get_main_kb())
+        # Select — всегда отдельно: у него своя пагинация и особый вид
+        return ActionResult(
+            text=response_text,
+            keyboard=kb or get_main_kb(),
+            send_separately=True,
+            task_time=command.time
+        )
 
-
-    async def delete(self, command: TaskActionSchema, message: Message):
-        # Собираем все ID задач для выполнения/удаления
+    async def delete(self, command: TaskActionSchema) -> ActionResult:
         task_ids = []
         if command.task_id:
             task_ids.append(command.task_id)
@@ -304,46 +262,34 @@ class TaskActionsService:
                     task_ids.append(tid)
 
         if not task_ids:
-            await message.answer(TaskMessages.task_delete_id_missing())
-            return
+            return ActionResult(text=TaskMessages.task_delete_id_missing())
 
         completed_titles = []
         not_found_count = 0
         denied_count = 0
 
         for tid in task_ids:
-            # 1. Получаем задачу из базы данных
             task = await get_task_by_id(self.db, tid)
             if not task:
                 not_found_count += 1
                 continue
-
-            # Проверяем права: принадлежит ли задача текущему пользователю
             if task['user_id'] != self.user['id']:
                 denied_count += 1
                 continue
-
-            # 2. Помечаем задачу как выполненную (status = 1)
             await complete_task(self.db, tid)
-
-            # 3. Удаляем из планировщика
             self.scheduler_service.remove_scheduler_jobs(tid)
-
             completed_titles.append(task['content'])
 
         if not completed_titles:
             if denied_count > 0:
-                await message.answer(TaskMessages.task_delete_access_denied())
+                return ActionResult(text=TaskMessages.task_delete_access_denied())
             elif not_found_count > 0:
-                await message.answer(TaskMessages.task_not_found())
-            return
+                return ActionResult(text=TaskMessages.task_not_found())
 
         if len(completed_titles) == 1:
-            confirm_text = TaskMessages.task_completed(completed_titles[0])
+            return ActionResult(text=TaskMessages.task_completed(completed_titles[0]), task_time=command.time)
         else:
-            confirm_text = TaskMessages.tasks_completed_plural(completed_titles)
-
-        await message.answer(confirm_text, parse_mode='HTML', reply_markup=get_main_kb())
+            return ActionResult(text=TaskMessages.tasks_completed_plural(completed_titles), task_time=command.time)
 
     async def resolve_conflict(self, action: str, message: Message, new_task_id: int = None, old_task_id: int = None):
         """
