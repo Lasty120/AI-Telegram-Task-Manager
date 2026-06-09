@@ -14,4 +14,4 @@ GROQ_API_KEY = getenv("GROQ_API_KEY")
 TIMEZONE_STR = getenv("TIMEZONE", "Asia/Almaty")
 TIMEZONE = pytz.timezone(TIMEZONE_STR)
 
-
+TASKS_LIMIT_OF_PAGES = 10
