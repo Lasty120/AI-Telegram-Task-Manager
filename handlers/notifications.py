@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery
 from aiosqlite import Connection, Row
 
 from database.crud.task import complete_task, get_task_by_id, update_task
-from messages import TaskMessages
+from messages import TaskMessages, NotificationMessages
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
 from config import TIMEZONE
 from services.tasks.actions import TaskActionsService
@@ -41,7 +41,7 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
 
     # Обновляем текст сообщения, убирая кнопки
     text = TaskMessages.task_notification(task['content'], task['details'])
-    text += "\n\n✅ <b>Выполнено</b>"
+    text += NotificationMessages.task_successfully_completed()
 
     await callback.message.edit_text(
         text=text,
@@ -113,11 +113,11 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         except Exception:
             pass
 
-    await callback.answer(TaskMessages.task_delayed_success())
+    await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=Tru)
 
     # Обновляем сообщение в чате
     text = TaskMessages.task_notification(task['content'], task['details'])
-    text += f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_time_dt.strftime('%H:%M')})"
+    text += NotificationMessages.task_delayed(new_time_dt)
 
     await callback.message.edit_text(
         text=text,

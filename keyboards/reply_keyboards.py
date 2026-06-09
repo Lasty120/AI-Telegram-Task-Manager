@@ -6,7 +6,7 @@ from aiogram.types import (ReplyKeyboardMarkup,
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from utils.context import user_lang
 
-def get_main_kb():
+def get_main_kb(opt_lang: str = None):
         builder = ReplyKeyboardBuilder()
         lang = user_lang.get()
 
@@ -20,9 +20,12 @@ def get_main_kb():
                 "completed": "My completed tasks"
             }
         }
-
-        # Получаем словарь для текущего языка (по умолчанию 'ru')
-        t = translations.get(lang, translations["ru"])
+        # Логика для обработки смены  клавиатуры при смене языка
+        if opt_lang:
+            t = translations.get(opt_lang, translations["ru"])
+        else:
+            # Получаем словарь для текущего языка (по умолчанию 'ru')
+            t = translations.get(lang, translations["ru"])
 
         builder.button(text=t["my_tasks"])
         builder.button(text=t["completed"])

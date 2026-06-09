@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from aiogram import Bot, Dispatcher
 
 from handlers import get_handlers_router
@@ -11,7 +12,6 @@ from services.scheduler import init_scheduler
 dp = Dispatcher()
 bot = Bot(token=TOKEN)
 
-
 async def main():
     await init_db(db_path=DB_PATH)
     dp.include_router(get_handlers_router())
@@ -22,12 +22,22 @@ async def main():
     dp.update.middleware(DbSessionMiddleware(db_path=DB_PATH))
     dp.update.middleware(UserMiddleware())
 
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
-
+    # Бесконечный цикл для автоматического переподключения
+    while True:
+        try:
+            logging.info("Запуск поллинга...")
+            await dp.start_polling(bot)
+        except Exception as e:
+            logging.error(f"Сетевая ошибка или сбой: {e}. Перезапуск через 5 секунд...")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     print("Bot has been started")
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Бот остановлен пользователем")
+    finally:
+        # Корректно закрываем сессию только при полном выключении скрипта
+        asyncio.run(bot.session.close())

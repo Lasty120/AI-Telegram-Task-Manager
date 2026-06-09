@@ -313,15 +313,6 @@ class TaskMessages:
         return text
 
     @classmethod
-    def task_delay(cls, new_dt: str) -> str:
-        lang = user_lang.get()
-        translations = {
-            "ru": f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_dt})",
-            "en": f"\n\n⏰ <b>Delayed by 15 minutes</b> (until {new_dt})",
-        }
-        return translations.get(lang, translations["ru"])
-
-    @classmethod
     def conflict_warning(cls, new_task_content: str, new_task_time: str, old_task_content: str, old_task_time: str) -> str:
         lang = user_lang.get()
         escaped_new = hd.quote(new_task_content)
@@ -466,4 +457,25 @@ class LangMessages:
             "ru": "Язык был успешно изменен!",
             "en": "Language successfully changed."
         }
+        return translations.get(lang, translations["ru"])
+
+
+class NotificationMessages:
+    @classmethod
+    def task_successfully_completed(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "\n\n✅ <b>Выполнено</b>",
+            "en": "\n\n.✅ <b>Completed</b>"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_delayed(cls, new_time_dt) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": f"\n\n⏰ <b>Отложено на 15 минут</b> (до {new_time_dt.strftime('%H:%M')})",
+            "en": f"\n\n⏰ <b>Delayed by 15 minutes</b> (until {new_time_dt.strftime('%H:%M')})"
+        }
+
         return translations.get(lang, translations["ru"])

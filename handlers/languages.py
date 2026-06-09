@@ -22,5 +22,5 @@ async def change_language_handler(
     )
     await message.answer(
         text=LangMessages.lang_successfully_changed(new_lang=new_lang),
-        reply_markup=get_main_kb()
+        reply_markup=get_main_kb(opt_lang=new_lang)
     )
