@@ -38,14 +38,14 @@ def format_importance(importance: str | None, lang: str) -> str:
     
     translations = {
         "ru": {
-            "low": "🟢",
-            "medium": "🟡",
-            "most important": "🔴"
+            "low": "[🟢] Низкий приоритет\n",
+            "medium": "[🟡] Важно\n",
+            "most important": "[🔴] Очень важно\n"
         },
         "en": {
-            "low": "🟢",
-            "medium": "🟡",
-            "most important": "🔴T"
+            "low": "[🟢] Low priority\n",
+            "medium": "[🟡] Important\n",
+            "most important": "[🔴] Very important\n"
         }
     }
     
