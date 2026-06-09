@@ -55,7 +55,8 @@ class TaskSchedulerService:
         content: str,
         details: str | None,
         localized_dt: datetime,
-        duration: int | None
+        duration: int | None,
+        importance: str | None = None
     ):
         """
         Добавляет/обновляет задачи старта и завершения в планировщике.
@@ -66,7 +67,8 @@ class TaskSchedulerService:
             'user_id': self.tg_id,
             'task_text': content,
             'task_details': details,
-            'task_id': task_id
+            'task_id': task_id,
+            'task_importance': importance
         }
 
         self.schedule_or_remove(

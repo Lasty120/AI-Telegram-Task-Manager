@@ -31,6 +31,29 @@ def format_date_header(dt: datetime, lang: str) -> str:
         return f"📅 <b>{day} {months_ru[month]}, {weekdays_ru[weekday]}</b>\n"
 
 
+def format_importance(importance: str | None, lang: str) -> str:
+    """Возвращает красивый бейдж уровня важности в зависимости от языка."""
+    if not importance:
+        return ""
+    
+    translations = {
+        "ru": {
+            "low": "🟢",
+            "medium": "🟡",
+            "most important": "🔴"
+        },
+        "en": {
+            "low": "🟢",
+            "medium": "🟡",
+            "most important": "🔴T"
+        }
+    }
+    
+    lang_dict = translations.get(lang, translations["ru"])
+    key = importance.lower()
+    return lang_dict.get(key, f"[{importance}]")
+
+
 def format_tasks_list(tasks: list, tz, lang: str) -> str:
     """Группирует список задач по датам и форматирует их в список с эмодзи."""
     # Группируем задачи по дате
@@ -73,7 +96,13 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
             else:
                 time_str = formatted_time
                 
-            task_line = f"- ⏰ {time_str}. <b>{escaped_content}</b>"
+            importance = task['importance'] if 'importance' in task.keys() else None
+            imp_str = format_importance(importance, lang)
+            
+            if imp_str:
+                task_line = f"- ⏰ {time_str}. {imp_str} <b>{escaped_content}</b>"
+            else:
+                task_line = f"- ⏰ {time_str}. <b>{escaped_content}</b>"
             
             if task['details']:
                 escaped_details = hd.quote(task['details'])

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List
+from database.models import TaskImportance
 
 
 class TaskActionSchema(BaseModel):
@@ -14,6 +15,7 @@ class TaskActionSchema(BaseModel):
     task_id: Optional[int] = Field(None, description="ID задачи, если юзер просит изменить или удалить конкретную")
     task_ids: Optional[List[int]] = Field(None, description="Список ID задач, выбранных для действия select")
     duration: Optional[int] = Field(None, description="Ориентировочная продолжительность задачи в минутах")
+    importance: Optional[TaskImportance] = Field(None, description="Важность/приоритет задачи: 'low' (низкая), 'medium' (средняя) или 'most important' (высокая/важная). Заполняется, только если пользователь явно указал на важность. По умолчанию null.")
 
 
 class MultiTaskActionSchema(BaseModel):

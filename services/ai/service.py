@@ -35,10 +35,13 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
                     formatted_ends_at = ends_at_time.strftime("%Y-%m-%d %H:%M")
                 else:
                     formatted_ends_at = None
+                importance = task["importance"] if "importance" in task.keys() else None
+
             except Exception:
                 formatted_time = None
                 formatted_ends_at = None
                 duration = None
+                importance = None
                 
             tasks_list.append({
                 "task_id": task["id"],
@@ -46,7 +49,8 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
                 "details": task["details"],
                 "time": formatted_time,
                 "duration": duration,
-                "ends_at": formatted_ends_at
+                "ends_at": formatted_ends_at,
+                "importance": importance
             })
     tasks_json = json.dumps(tasks_list, ensure_ascii=False, indent=2)
     system_prompt += f"\n\n<user tasks>\n{tasks_json}\n</user tasks>"

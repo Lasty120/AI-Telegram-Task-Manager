@@ -15,7 +15,7 @@ from config import DB_PATH, TIMEZONE
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 
-async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
+async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
     """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
         # Получаем язык пользователя из базы данных
@@ -32,7 +32,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
 
         token = user_lang.set(lang)
         try:
-            text = TaskMessages.task_notification(task_text, task_details)
+            text = TaskMessages.task_notification(task_text, task_details, task_importance)
         finally:
             user_lang.reset(token)
 
@@ -46,7 +46,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 
 
-async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None):
+async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
     """Эта функция будет вызываться планировщиком при окончании задачи"""
     try:
         # Получаем язык пользователя из базы данных
@@ -63,7 +63,7 @@ async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, tas
 
         token = user_lang.set(lang)
         try:
-            text = TaskMessages.task_end_notification(task_text, task_details)
+            text = TaskMessages.task_end_notification(task_text, task_details, task_importance)
         finally:
             user_lang.reset(token)
 
@@ -88,7 +88,7 @@ async def init_scheduler(bot: Bot):
         # Запрашиваем только невыполненные задачи с Telegram ID пользователя
         async with db.execute(
             """
-            SELECT tasks.id, users.tg_id, tasks.content, tasks.details, tasks.time, tasks.duration 
+            SELECT tasks.id, users.tg_id, tasks.content, tasks.details, tasks.time, tasks.duration, tasks.importance 
             FROM tasks 
             JOIN users ON tasks.user_id = users.id 
             WHERE tasks.status = 0
@@ -104,6 +104,7 @@ async def init_scheduler(bot: Bot):
             # Парсим UNIX timestamp из БД
             task_time = datetime.fromtimestamp(int(task['time']), tz=tz)
             task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 0
+            task_imp = task['importance'] if 'importance' in task.keys() else None
 
             # 1. Напоминание о начале задачи
             if task_time > now:
@@ -117,6 +118,7 @@ async def init_scheduler(bot: Bot):
                         'task_text': task['content'],
                         'task_details': task['details'],  # Передаем details
                         'task_id': task['id'],  # <-- Передаем ID задачи
+                        'task_importance': task_imp,
                     },
                     id=f"task_{task['id']}",
                     replace_existing=True,
@@ -137,6 +139,7 @@ async def init_scheduler(bot: Bot):
                             'task_text': task['content'],
                             'task_details': task['details'],
                             'task_id': task['id'],
+                            'task_importance': task_imp,
                         },
                         id=f"task_end_{task['id']}",
                         replace_existing=True,

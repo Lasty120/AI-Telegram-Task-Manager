@@ -19,6 +19,7 @@ async def init_db(db_path: str):
             time INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             duration INTEGER,
+            importance TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
 
@@ -45,5 +46,7 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE tasks ADD COLUMN details TEXT;")
             if "duration" not in column_names:
                 await db.execute("ALTER TABLE tasks ADD COLUMN duration INTEGER;")
+            if "importance" not in column_names:
+                await db.execute("ALTER TABLE tasks ADD COLUMN importance TEXT;")
         
         await db.commit()

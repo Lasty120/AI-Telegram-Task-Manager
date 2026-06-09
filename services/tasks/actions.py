@@ -114,6 +114,7 @@ class TaskActionsService:
             content=command.content,
             details=command.details,
             duration=command.duration,
+            importance=command.importance,
         )
 
         # 2. Добавляем в планировщик на лету
@@ -122,7 +123,8 @@ class TaskActionsService:
             content=command.content,
             details=command.details,
             localized_dt=localized_dt,
-            duration=command.duration
+            duration=command.duration,
+            importance=command.importance,
         )
 
         # 3. Проверяем на конфликты с другими активными задачами (исключая саму новую задачу)
@@ -155,7 +157,8 @@ class TaskActionsService:
                 display_time=display_time,
                 details=command.details,
                 duration=command.duration,
-                display_end_time=display_end_time
+                display_end_time=display_end_time,
+                importance=command.importance,
             )
             await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
@@ -202,7 +205,8 @@ class TaskActionsService:
         # Длительность
         new_duration = command.duration if command.duration is not None else (task['duration'] if 'duration' in task.keys() else None)
 
-
+        # Важность
+        new_importance = command.importance if command.importance is not None else (task['importance'] if 'importance' in task.keys() else None)
 
         # 3. Сохраняем изменения в БД
         await update_task(
@@ -212,6 +216,7 @@ class TaskActionsService:
             details=new_details,
             time_val=new_time_timestamp,
             duration=new_duration,
+            importance=new_importance,
         )
 
         # 4. Обновляем планировщик
@@ -220,7 +225,8 @@ class TaskActionsService:
             content=new_content,
             details=new_details,
             localized_dt=localized_dt,
-            duration=new_duration
+            duration=new_duration,
+            importance=new_importance,
         )
 
         display_end_time = get_display_end_time(localized_dt, new_duration)
@@ -231,6 +237,7 @@ class TaskActionsService:
             details=new_details,
             duration=new_duration,
             display_end_time=display_end_time,
+            importance=new_importance,
         )
         await message.answer(confirm_text, reply_markup=get_main_kb(), parse_mode="HTML")
 
@@ -379,7 +386,8 @@ class TaskActionsService:
             content=target_task['content'],
             details=target_task['details'],
             localized_dt=new_dt,
-            duration=target_dur
+            duration=target_dur,
+            importance=target_task['importance'] if 'importance' in target_task.keys() else None
         )
 
         # 5. Формируем сообщение для UI

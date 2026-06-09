@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from aiogram.utils.markdown import html_decoration as hd
 from utils.context import user_lang
 from utils.formatters import format_tasks_list
+from utils.formatters import format_importance
 
 
 class StartMessages:
@@ -110,7 +111,7 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, duration: int = None) -> str:
+    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, duration: int = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -126,7 +127,14 @@ class TaskMessages:
             },
         }
         t = translations.get(lang, translations["ru"])
+        
+        from utils.formatters import format_importance
+        imp_str = format_importance(importance.value, lang)
+        
         text = t["header"]
+        if imp_str:
+            text = f"{imp_str} " + text
+            
         if display_end_time:
             text += t["until"]
         if details:
@@ -171,7 +179,7 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_updated(cls, content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None) -> str:
+    def task_updated(cls, content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -187,7 +195,14 @@ class TaskMessages:
             },
         }
         t = translations.get(lang, translations["ru"])
+        
+        from utils.formatters import format_importance
+        imp_str = format_importance(importance, lang)
+        
         text = t["header"]
+        if imp_str:
+            text = f"{imp_str} " + text
+            
         if display_end_time:
             text += t["until"]
         if details:
@@ -271,7 +286,7 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_notification(cls, content: str, details: str = None) -> str:
+    def task_notification(cls, content: str, details: str = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -285,14 +300,20 @@ class TaskMessages:
             },
         }
         t = translations.get(lang, translations["ru"])
+
+        imp_str = format_importance(importance, lang)
+        
         text = t["header"]
+        if imp_str:
+            text = f"{imp_str} " + text
+            
         if details:
             escaped_details = hd.quote(details)
             text += f"\n\n{t['details_label']}\n<i>{escaped_details}</i>"
         return text
 
     @classmethod
-    def task_end_notification(cls, content: str, details: str = None) -> str:
+    def task_end_notification(cls, content: str, details: str = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -306,7 +327,14 @@ class TaskMessages:
             },
         }
         t = translations.get(lang, translations["ru"])
+        
+        from utils.formatters import format_importance
+        imp_str = format_importance(importance, lang)
+        
         text = t["header"]
+        if imp_str:
+            text = f"{imp_str} " + text
+            
         if details:
             escaped_details = hd.quote(details)
             text += f"\n\n{t['details_label']}\n<i>{escaped_details}</i>"

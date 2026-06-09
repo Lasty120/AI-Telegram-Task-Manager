@@ -9,17 +9,18 @@ async def create_task(
         time: int,
         user_id: int,
         details: str = None,
-        duration: int = None
+        duration: int = None,
+        importance: str = None
 ) -> int:
     """
     Записывает задачу с точным временем unix timestamp, когда должно сработать напоминание.
     """
     async with db.execute(
         """
-        INSERT INTO tasks (content, details, time, user_id, duration) 
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO tasks (content, details, time, user_id, duration, importance) 
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (content, details, time, user_id, duration)
+        (content, details, time, user_id, duration, importance)
     ) as cursor:
         last_id = cursor.lastrowid
     await db.commit()
@@ -186,7 +187,8 @@ async def update_task(
     content: str = None,
     details: str = None,
     time_val: int = None,
-    duration: int = None
+    duration: int = None,
+    importance: str = None
 ):
     updates = []
     params = []
@@ -202,6 +204,9 @@ async def update_task(
     if duration is not None:
         updates.append("duration = ?")
         params.append(duration)
+    if importance is not None:
+        updates.append("importance = ?")
+        params.append(importance)
         
     if not updates:
         return

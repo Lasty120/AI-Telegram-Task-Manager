@@ -23,8 +23,9 @@ def get_paginated_text(base_text: str, current_page: int, total_count: int, limi
             "from_word": "of"
         }
     }
-    page_word = translations.get(lang, translations["page_word"])
-    from_word = translations.get(lang, translations["from_word"])
+    lang_dict = translations.get(lang, translations["ru"])
+    page_word = lang_dict["page_word"]
+    from_word = lang_dict["from_word"]
     total_pages = (total_count + limit - 1) // limit
 
     return f"{base_text}\n\n📖 <i>{page_word} {current_page} {from_word} {total_pages}</i>"
