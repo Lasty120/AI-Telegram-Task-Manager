@@ -15,6 +15,10 @@ from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
 
 from services.notion.service import add_tasks_to_notion
+from database.crud.task import get_task_by_id, mark_tasks_notion_added
+
+
+from services.notion.service import add_tasks_to_notion
 from messages import NotionMessages
 
 
@@ -155,7 +159,20 @@ class TaskActionsService:
                 display_end_time=display_end_time,
                 importance=command.importance,
             )
-            return ActionResult(text=confirm_text, task_time=command.time)
+            # Если пользователь попросил сразу добавить в Notion
+            user_dict = dict(self.user)
+            if command.add_to_notion and user_dict.get("notion_token") and user_dict.get("notion_db_id"):
+                new_task = await get_task_by_id(self.db, new_task_id)
+                if new_task:
+                    success_count, _ = await add_tasks_to_notion(
+                        notion_token=self.user["notion_token"],
+                        notion_db_id=self.user["notion_db_id"],
+                        tasks=[new_task],
+                    )
+                    if success_count > 0:
+                        await mark_tasks_notion_added(self.db, [new_task_id])
+
+            return ActionResult(text=confirm_text, task_time=command.time)  # уже существующий return
 
     async def update(self, command: TaskActionSchema) -> ActionResult:
         task_id = command.task_id or (command.task_ids[0] if command.task_ids else None)
@@ -324,6 +341,16 @@ class TaskActionsService:
             notion_db_id=notion_db_id,
             tasks=tasks,
         )
+
+        # Помечаем успешно добавленные задачи
+        if success_count > 0:
+            from database.crud.task import mark_tasks_notion_added
+            # Помечаем все task_ids — если были частичные ошибки,
+            # лучше пометить все и дать пользователю повторить вручную
+            added_ids = [
+                t["id"] for t in tasks
+            ][:success_count]  # первые success_count — оптимистично
+            await mark_tasks_notion_added(self.db, added_ids)
 
         # 4. Формируем ответ
         return ActionResult(

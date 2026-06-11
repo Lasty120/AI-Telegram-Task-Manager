@@ -16,6 +16,10 @@ class TaskActionSchema(BaseModel):
     task_ids: Optional[List[int]] = Field(None, description="Список ID задач, выбранных для действия select")
     duration: Optional[int] = Field(None, description="Ориентировочная продолжительность задачи в минутах")
     importance: Optional[TaskImportance] = Field(None, description="Важность/приоритет задачи: 'low' (низкая), 'medium' (средняя) или 'most important' (высокая/важная). Заполняется, только если пользователь явно указал на важность. По умолчанию null.")
+    add_to_notion: Optional[bool] = Field(
+        None,
+        description="Только для action=create. True если пользователь хочет создать задачу И сразу добавить в Notion."
+    )
 
 
 class MultiTaskActionSchema(BaseModel):

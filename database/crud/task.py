@@ -215,3 +215,15 @@ async def update_task(
     query = f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?"
     await db.execute(query, tuple(params))
     await db.commit()
+
+
+async def mark_tasks_notion_added(db: aiosqlite.Connection, task_ids: list[int]):
+    """Помечает задачи как добавленные в Notion."""
+    if not task_ids:
+        return
+    placeholders = ", ".join("?" for _ in task_ids)
+    await db.execute(
+        f"UPDATE tasks SET notion_added = 1 WHERE id IN ({placeholders})",
+        tuple(task_ids)
+    )
+    await db.commit()

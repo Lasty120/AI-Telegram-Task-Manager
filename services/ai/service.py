@@ -53,7 +53,8 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
                 "time": formatted_time,
                 "duration": duration,
                 "ends_at": formatted_ends_at,
-                "importance": importance
+                "importance": importance,
+                "notion_added": bool(task["notion_added"]) if "notion_added" in task.keys() else False,
             })
     tasks_json = json.dumps(tasks_list, ensure_ascii=False, indent=2)
     system_prompt += f"\n\n<user tasks>\n{tasks_json}\n</user tasks>"
