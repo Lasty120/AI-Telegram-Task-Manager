@@ -36,3 +36,12 @@ async def change_language(db: aiosqlite.Connection, tg_id: int, user: aiosqlite.
     await db.commit()
 
     return new_lang
+
+
+async def update_user_notion(db: aiosqlite.Connection, tg_id: int, notion_token: str | None, notion_db_id: str | None):
+    safe_tg_id = int(tg_id)
+    await db.execute(
+        "UPDATE users SET notion_token = ?, notion_db_id = ? WHERE tg_id = ?",
+        (notion_token, notion_db_id, safe_tg_id)
+    )
+    await db.commit()

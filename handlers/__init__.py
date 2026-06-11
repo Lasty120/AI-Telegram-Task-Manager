@@ -6,6 +6,7 @@ from handlers.tasks_ai import router as task_ai_router
 from handlers.voice_transcriptor import router as voice_transcriptor_router
 from handlers.notifications import router as notifications_router
 from handlers.languages import router as languages_router
+from handlers.notion_registration import router as notion_registration_router
 
 
 def get_handlers_router() -> Router:
@@ -13,6 +14,7 @@ def get_handlers_router() -> Router:
 
     # Объединяем их здесь, внутри папки handlers
     router.include_router(start_router)
+    router.include_router(notion_registration_router)
     router.include_router(languages_router)
     router.include_router(task_router)
     router.include_router(task_ai_router)

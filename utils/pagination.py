@@ -28,7 +28,7 @@ def get_paginated_text(base_text: str, current_page: int, total_count: int, limi
     from_word = lang_dict["from_word"]
     total_pages = (total_count + limit - 1) // limit
 
-    return f"{base_text}\n\n📖 <i>{page_word} {current_page} {from_word} {total_pages}</i>"
+    return f"{base_text}\n\n<i>{page_word} {current_page} {from_word} {total_pages}</i>"
 
 
 async def send_paginated_message(

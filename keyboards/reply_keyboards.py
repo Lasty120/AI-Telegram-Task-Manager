@@ -31,3 +31,25 @@ def get_main_kb(opt_lang: str = None):
         builder.button(text=t["completed"])
 
         return builder.as_markup(resize_keyboard=True)
+
+
+def get_registration_kb():
+    builder = ReplyKeyboardBuilder()
+    lang = user_lang.get()
+
+    translations = {
+        "ru": {
+            "skip": "Пропустить",
+            "cancel": "Отмена"
+        },
+        "en": {
+            "skip": "Skip",
+            "cancel": "Cancel"
+        }
+    }
+    t = translations.get(lang, translations["ru"])
+
+    builder.button(text=t["skip"])
+    builder.button(text=t["cancel"])
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)

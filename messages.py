@@ -96,7 +96,7 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, duration: int = None, importance: str = None) -> str:
+    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -162,7 +162,7 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_updated(cls, content: str, display_time: str, details: str = None, duration: int = None, display_end_time: str = None, importance: str = None) -> str:
+    def task_updated(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
@@ -476,4 +476,148 @@ class NotificationMessages:
             "en": f"\n\n<b>Delayed by 15 minutes</b> (until {new_time_dt.strftime('%H:%M')})"
         }
 
+        return translations.get(lang, translations["ru"])
+
+
+class NotionMessages:
+    @classmethod
+    def start_registration(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Регистрация Notion</b>\n\n"
+                "Чтобы связать бота с вашим Notion, пожалуйста, отправьте ваш <b>Notion Integration Token</b> (Internal Integration Token).\n\n"
+                "Вы можете создать интеграцию на странице <a href='https://www.notion.so/my-integrations'>notion.so/my-integrations</a>.\n\n"
+                "Если вы хотите пропустить этот шаг, отправьте /skip или нажмите кнопку.\n"
+                "Для отмены отправьте /cancel или нажмите кнопку."
+            ),
+            "en": (
+                "<b>Notion Registration</b>\n\n"
+                "To link the bot to your Notion, please send your <b>Notion Integration Token</b> (Internal Integration Token).\n\n"
+                "You can create an integration at <a href='https://www.notion.so/my-integrations'>notion.so/my-integrations</a>.\n\n"
+                "If you want to skip this step, send /skip or press the button.\n"
+                "To cancel, send /cancel or press the button."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def invalid_token(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Неверный формат токена!</b>\n\n"
+                "Токен Notion должен начинаться с <code>secret_</code>.\n"
+                "Пожалуйста, отправьте корректный токен, пропустите шаг с помощью /skip или отмените регистрацию с помощью /cancel."
+            ),
+            "en": (
+                "<b>Invalid token format!</b>\n\n"
+                "Notion token must start with <code>secret_</code>.\n"
+                "Please send a valid token, skip this step with /skip, or cancel with /cancel."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def ask_db_id(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Укажите ID или ссылку на базу данных Notion</b>\n\n"
+                "Пожалуйста, отправьте ссылку на вашу базу данных задач Notion или её ID.\n"
+                "ID автоматически извлечётся из ссылки вида:\n"
+                "<code>https://www.notion.so/[DATABASE_ID]?v=...</code>\n\n"
+                "Не забудьте поделиться (Share) вашей базой данных с созданной интеграцией в самом Notion!\n\n"
+                "Отправьте ссылку/ID, пропустите шаг с помощью /skip или отмените с помощью /cancel."
+            ),
+            "en": (
+                "<b>Provide Notion Database ID or URL</b>\n\n"
+                "Please send the URL of your Notion tasks database or its ID.\n"
+                "The ID will be automatically extracted from URLs like:\n"
+                "<code>https://www.notion.so/[DATABASE_ID]?v=...</code>\n\n"
+                "Don't forget to share your database with the created integration in Notion!\n\n"
+                "Send the URL/ID, skip with /skip, or cancel with /cancel."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def invalid_db_id(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Не удалось найти ID базы данных в вашем сообщении!</b>\n\n"
+                "Убедитесь, что вы отправили корректную ссылку Notion или 32-значный ID (состоящий из букв a-f и цифр).\n"
+                "Пожалуйста, попробуйте снова, пропустите шаг (/skip) или отмените (/cancel)."
+            ),
+            "en": (
+                "<b>Could not find Database ID in your message!</b>\n\n"
+                "Make sure you sent a valid Notion URL or a 32-character hex ID (consisting of letters a-f and digits).\n"
+                "Please try again, skip this step (/skip), or cancel (/cancel)."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def connection_failed(cls, error_msg: str) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Не удалось связаться с Notion!</b>\n\n"
+                f"Ошибка от Notion: <code>{error_msg}</code>\n\n"
+                "Пожалуйста, убедитесь, что:\n"
+                "1. Токен интеграции скопирован без ошибок.\n"
+                "2. Ссылка/ID базы данных указаны верно.\n"
+                "3. <b>Важно:</b> Вы открыли доступ интеграции к этой базе данных в Notion (через Connections в верхнем правом меню базы данных).\n\n"
+                "Давайте попробуем настроить заново. Пожалуйста, отправьте ваш Notion Integration Token:"
+            ),
+            "en": (
+                "<b>Failed to connect to Notion!</b>\n\n"
+                f"Error from Notion: <code>{error_msg}</code>\n\n"
+                "Please ensure that:\n"
+                "1. The integration token is copied correctly.\n"
+                "2. The database URL/ID is correct.\n"
+                "3. <b>Important:</b> You have granted connection access to the integration on the database page in Notion.\n\n"
+                "Let's start the configuration again. Please send your Notion Integration Token:"
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def verifying_connection(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Проверяем соединение с Notion...</b> Пожалуйста, подождите.",
+            "en": "<b>Checking connection with Notion...</b> Please wait."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def registration_cancelled(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Регистрация Notion отменена.",
+            "en": "Notion registration cancelled."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def registration_success(cls, token: str | None, db_id: str | None) -> str:
+        lang = user_lang.get()
+        token_str = token[:4] + "..." + token[-4:] if token else "—"
+        db_id_str = db_id if db_id else "—"
+        translations = {
+            "ru": (
+                "<b>Регистрация Notion успешно завершена!</b>\n\n"
+                f"• Ключ интеграции: <code>{token_str}</code>\n"
+                f"• ID базы данных: <code>{db_id_str}</code>\n\n"
+                "Все настройки сохранены. Теперь ваши задачи могут синхронизироваться с Notion."
+            ),
+            "en": (
+                "<b>Notion registration completed successfully!</b>\n\n"
+                f"• Integration Key: <code>{token_str}</code>\n"
+                f"• Database ID: <code>{db_id_str}</code>\n\n"
+                "All settings saved. Now your tasks can synchronize with Notion."
+            )
+        }
         return translations.get(lang, translations["ru"])
