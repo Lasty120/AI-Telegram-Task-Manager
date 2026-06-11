@@ -29,7 +29,6 @@ async def get_my_tasks_handler(message: Message, db: Connection, user: Row):
     response_text = format_tasks_message(
         tasks=tasks,
         empty_text=TaskMessages.tasks_empty(),
-        header_text=TaskMessages.tasks_header()
     )
 
     await send_paginated_message(
@@ -49,7 +48,6 @@ async def page_active_callback(callback: CallbackQuery, db: Connection, user: Ro
     response_text = format_tasks_message(
         tasks=tasks,
         empty_text=TaskMessages.tasks_empty(),
-        header_text=TaskMessages.tasks_header()
     )
 
     await edit_paginated_message(
@@ -66,7 +64,6 @@ async def get_my_completed_tasks_handler(message: Message, db: Connection, user:
     response_text = format_tasks_message(
         tasks=tasks,
         empty_text=TaskMessages.completed_tasks_empty(),
-        header_text=TaskMessages.completed_tasks_header()
     )
 
     await send_paginated_message(
@@ -86,7 +83,6 @@ async def page_completed_callback(callback: CallbackQuery, db: Connection, user:
     response_text = format_tasks_message(
         tasks=tasks,
         empty_text=TaskMessages.completed_tasks_empty(),
-        header_text=TaskMessages.completed_tasks_header()
     )
 
     await edit_paginated_message(

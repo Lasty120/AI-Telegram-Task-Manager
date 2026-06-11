@@ -47,7 +47,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
 
 
 async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
-    """Эта функция будет вызываться планировщиком при окончании задачи"""
+    """Эта функция будет вызываться планировщиком при окончании задачи. ПОТЕНЦИАЛЬНО УДАЛИТЬ"""
     try:
         # Получаем язык пользователя из базы данных
         lang = "ru"
@@ -63,16 +63,17 @@ async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, tas
 
         token = user_lang.set(lang)
         try:
-            text = TaskMessages.task_end_notification(task_text, task_details, task_importance)
+            pass
+            # text = TaskMessages.task_end_notification(task_text, task_details, task_importance)
         finally:
             user_lang.reset(token)
 
-        await bot.send_message(
-            chat_id=user_id,
-            text=text,
-            parse_mode="HTML",
-            reply_markup=get_task_action_keyboard(task_id)
-        )
+        # await bot.send_message(
+        #     chat_id=user_id,
+        #     text=text,
+        #     parse_mode="HTML",
+        #     reply_markup=get_task_action_keyboard(task_id)
+        # )
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление о конце задачи юзеру {user_id}: {e}")
 

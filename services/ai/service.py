@@ -8,6 +8,7 @@ import re
 from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL, TIMEZONE
 from database.schemas import MultiTaskActionSchema
 from services.ai.prompts import get_system_prompt
+from utils.formatters import compute_local_indices
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
@@ -23,6 +24,7 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
     import json
     tasks_list = []
     if user_tasks:
+        local_indices = compute_local_indices(user_tasks, tz)
         for task in user_tasks:
             try:
                 task_time = datetime.fromtimestamp(task['time'], tz)
@@ -45,6 +47,7 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
                 
             tasks_list.append({
                 "task_id": task["id"],
+                "position": local_indices.get(task["id"]),
                 "content": task["content"],
                 "details": task["details"],
                 "time": formatted_time,
