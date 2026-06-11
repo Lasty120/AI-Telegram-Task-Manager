@@ -48,6 +48,8 @@ async def process_task_command(text: str, message, user, db):
             result = await action_service.select(command=task_cmd)
         elif task_cmd.action == "forbidden":
             result = ActionResult(text=AiMessages.execution_error(task_cmd.content))
+        elif task_cmd.action == "add-to-notion":
+            result = await action_service.add_to_notion(command=task_cmd)
         else:
             result = ActionResult(
                 text=AiMessages.unknown_action(task_cmd.content or text)

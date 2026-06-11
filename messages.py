@@ -621,3 +621,43 @@ class NotionMessages:
             )
         }
         return translations.get(lang, translations["ru"])
+
+
+    @classmethod
+    def not_configured(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "Notion не подключён. Используйте /start_registration, "
+                "чтобы привязать свою базу данных."
+            ),
+            "en": (
+                "Notion is not connected. Use /start_registration "
+                "to link your database."
+            ),
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def no_tasks_to_send(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Не смог определить, какие задачи отправить в Notion.",
+            "en": "Could not determine which tasks to send to Notion.",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def tasks_sent(cls, success_count: int, total: int, errors: list) -> str:
+        lang = user_lang.get()
+        if lang == "en":
+            text = f"<b>Sent to Notion: {success_count}/{total}</b>"
+            if errors:
+                joined = "\n".join(f"• {e}" for e in errors[:3])
+                text += f"\n\nErrors:\n{joined}"
+        else:
+            text = f"<b>Отправлено в Notion: {success_count}/{total}</b>"
+            if errors:
+                joined = "\n".join(f"• {e}" for e in errors[:3])
+                text += f"\n\nОшибки:\n{joined}"
+        return text

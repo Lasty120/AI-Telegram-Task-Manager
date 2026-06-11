@@ -14,6 +14,9 @@ from services.task_scheduler import TaskSchedulerService
 from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
 
+from services.notion.service import add_tasks_to_notion
+from messages import NotionMessages
+
 
 class TaskActionsService:
     def __init__(self, db: Connection, user: Row, bot: Bot):
@@ -149,7 +152,6 @@ class TaskActionsService:
                 content=command.content,
                 display_time=display_time,
                 details=command.details,
-                duration=command.duration,
                 display_end_time=display_end_time,
                 importance=command.importance,
             )
@@ -202,9 +204,11 @@ class TaskActionsService:
 
         display_end_time = get_display_end_time(localized_dt, new_duration)
         confirm_text = TaskMessages.task_updated(
-            content=new_content, display_time=display_time,
-            details=new_details, duration=new_duration,
-            display_end_time=display_end_time, importance=new_importance,
+            content=new_content,
+            display_time=display_time,
+            details=new_details,
+            display_end_time=display_end_time,
+            importance=new_importance,
         )
         return ActionResult(text=confirm_text, task_time=command.time)
 
@@ -290,6 +294,45 @@ class TaskActionsService:
             return ActionResult(text=TaskMessages.task_completed(completed_titles[0]), task_time=command.time)
         else:
             return ActionResult(text=TaskMessages.tasks_completed_plural(completed_titles), task_time=command.time)
+
+    async def add_to_notion(self, command: TaskActionSchema) -> ActionResult:
+
+
+        # 1. Проверяем, настроен ли Notion у пользователя
+        notion_token = self.user["notion_token"]
+        notion_db_id = self.user["notion_db_id"]
+
+        if not notion_token or not notion_db_id:
+            return ActionResult(text=NotionMessages.not_configured())
+
+        # 2. Получаем задачи по task_ids
+        if not command.task_ids:
+            return ActionResult(text=NotionMessages.no_tasks_to_send())
+
+        tasks = await get_tasks_by_ids(
+            db=self.db,
+            task_ids=command.task_ids,
+            user_id=self.user["id"],
+        )
+
+        if not tasks:
+            return ActionResult(text=TaskMessages.task_not_found())
+
+        # 3. Отправляем в Notion
+        success_count, errors = await add_tasks_to_notion(
+            notion_token=notion_token,
+            notion_db_id=notion_db_id,
+            tasks=tasks,
+        )
+
+        # 4. Формируем ответ
+        return ActionResult(
+            text=NotionMessages.tasks_sent(
+                success_count=success_count,
+                total=len(tasks),
+                errors=errors,
+            )
+        )
 
     async def resolve_conflict(self, action: str, message: Message, new_task_id: int = None, old_task_id: int = None):
         """

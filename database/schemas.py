@@ -4,9 +4,9 @@ from database.models import TaskImportance
 
 
 class TaskActionSchema(BaseModel):
-    action: Literal["create", "update", "delete", "select", "forbidden", "unknown"] = Field(
+    action: Literal["create", "update", "delete", "select", "forbidden", "unknown", "add-to-notion"] = Field(
         ...,
-        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete), выбрать/найти (select), запрещено (forbidden) или непонятно (unknown)"
+        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete), выбрать/найти (select), запрещено (forbidden) или непонятно (unknown), добавить в Notion (add-to-notion)"
     )
     content: Optional[str] = Field(None, description="Короткое название задачи, например 'Встреча с Тинькофф'")
     details: Optional[str] = Field(None, description="Подробное описание, перевод слова или дополнительные примечания к задаче")
