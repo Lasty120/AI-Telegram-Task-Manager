@@ -138,12 +138,14 @@ async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, use
         await action_service.resolve_conflict(action=action, message=callback.message)
         return
 
-    new_task_id = int(parts[2])
-    old_task_id = int(parts[3])
-
     if len(parts) < 4:
         await callback.answer("Некорректный запрос", show_alert=True)
         return
+
+    new_task_id = int(parts[2])
+    old_task_id = int(parts[3])
+
+
     
     await action_service.resolve_conflict(
         action=action,

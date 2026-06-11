@@ -229,7 +229,7 @@ class TaskActionsService:
         )
 
         if not tasks:
-            return ActionResult(text=TaskMessages.search_not_found(), task_time=command['time'])
+            return ActionResult(text=TaskMessages.search_not_found(), task_time=command.time)
 
         response_text = TaskMessages.search_results(
             query=command.content or "поиск", tasks=tasks, tz=self.tz

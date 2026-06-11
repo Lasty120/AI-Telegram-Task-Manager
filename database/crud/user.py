@@ -13,7 +13,7 @@ async def get_or_create_user(db: aiosqlite.Connection, tg_id: int) -> aiosqlite.
 
     # 2. Если не нашли — создаем
     await db.execute(
-        "INSERT INTO users (tg_id) VALUES (?)",
+        "INSERT OR IGNORE INTO users (tg_id) VALUES (?)",
         (safe_tg_id,)
     )
     await db.commit()
