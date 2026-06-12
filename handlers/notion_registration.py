@@ -68,7 +68,7 @@ async def cmd_cancel_registration(message: Message, state: FSMContext):
 
 
 # Начало регистрации
-@router.message(Command("start_registration"))
+@router.message(Command("add_notion"))
 async def cmd_start_registration(message: Message, state: FSMContext):
     await state.set_state(NotionRegistrationStates.waiting_for_token)
     await message.answer(

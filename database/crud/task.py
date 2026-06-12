@@ -227,3 +227,12 @@ async def mark_tasks_notion_added(db: aiosqlite.Connection, task_ids: list[int])
         tuple(task_ids)
     )
     await db.commit()
+
+
+async def set_task_notion_page_id(db: aiosqlite.Connection, task_id: int, page_id: str):
+    """Сохраняет ID страницы Notion и помечает задачу как добавленную."""
+    await db.execute(
+        "UPDATE tasks SET notion_added = 1, notion_page_id = ? WHERE id = ?",
+        (page_id, task_id)
+    )
+    await db.commit()

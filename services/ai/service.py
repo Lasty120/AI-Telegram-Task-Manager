@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 from pydantic import ValidationError
 from datetime import datetime, timedelta
-import pytz
+import json
 
 import re
 
@@ -21,7 +21,7 @@ async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskA
     system_prompt = get_system_prompt(current_time)
 
     # Форматируем и передаем список задач
-    import json
+
     tasks_list = []
     if user_tasks:
         local_indices = compute_local_indices(user_tasks, tz)

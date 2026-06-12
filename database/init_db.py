@@ -56,5 +56,7 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE tasks ADD COLUMN importance TEXT;")
             if "notion_added" not in column_names:
                 await db.execute("ALTER TABLE tasks ADD COLUMN notion_added INTEGER DEFAULT 0;")
-        
+            if "notion_page_id" not in column_names:
+                await db.execute("ALTER TABLE tasks ADD COLUMN notion_page_id TEXT;")
+
         await db.commit()

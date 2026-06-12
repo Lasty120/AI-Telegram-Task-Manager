@@ -11,22 +11,34 @@ from aiogram import Bot
 from keyboards.inline_keyboards import get_task_action_keyboard
 from config import DB_PATH, TIMEZONE
 
+from services.notion.service import update_task_status_in_notion
+
 # Создаем глобальный инстанс планировщика
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 
 async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
-    """Эта функция будет вызываться планировщиком в назначенное время"""
     try:
-        # Получаем язык пользователя из базы данных
         lang = "ru"
+        notion_token = notion_db_id = notion_page_id = None
         try:
             async with aiosqlite.connect(DB_PATH) as db:
                 db.row_factory = aiosqlite.Row
-                async with db.execute("SELECT lang FROM users WHERE tg_id = ?", (user_id,)) as cursor:
+                async with db.execute(
+                    """
+                    SELECT users.lang, users.notion_token, users.notion_db_id, tasks.notion_page_id
+                    FROM users
+                    JOIN tasks ON tasks.user_id = users.id
+                    WHERE users.tg_id = ? AND tasks.id = ?
+                    """,
+                    (user_id, task_id)
+                ) as cursor:
                     row = await cursor.fetchone()
                     if row:
                         lang = row["lang"]
+                        notion_token = row["notion_token"]
+                        notion_db_id = row["notion_db_id"]
+                        notion_page_id = row["notion_page_id"]
         except Exception as db_err:
             logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
 
@@ -42,6 +54,14 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
             parse_mode="HTML",
             reply_markup=get_task_action_keyboard(task_id)
         )
+
+        if notion_page_id and notion_token and notion_db_id:
+            await update_task_status_in_notion(
+                notion_token=notion_token,
+                notion_db_id=notion_db_id,
+                page_id=notion_page_id,
+                target_group="in_progress",
+            )
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 

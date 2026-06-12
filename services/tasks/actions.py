@@ -14,11 +14,9 @@ from services.task_scheduler import TaskSchedulerService
 from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
 
-from services.notion.service import add_tasks_to_notion
-from database.crud.task import get_task_by_id, mark_tasks_notion_added
+from services.notion.service import add_tasks_to_notion, sync_task_status
+from database.crud.task import get_task_by_id, mark_tasks_notion_added, set_task_notion_page_id
 
-
-from services.notion.service import add_tasks_to_notion
 from messages import NotionMessages
 
 
@@ -164,13 +162,13 @@ class TaskActionsService:
             if command.add_to_notion and user_dict.get("notion_token") and user_dict.get("notion_db_id"):
                 new_task = await get_task_by_id(self.db, new_task_id)
                 if new_task:
-                    success_count, _ = await add_tasks_to_notion(
+                    success_count, _, page_ids = await add_tasks_to_notion(
                         notion_token=self.user["notion_token"],
                         notion_db_id=self.user["notion_db_id"],
                         tasks=[new_task],
                     )
-                    if success_count > 0:
-                        await mark_tasks_notion_added(self.db, [new_task_id])
+                    if new_task_id in page_ids:
+                        await set_task_notion_page_id(self.db, new_task_id, page_ids[new_task_id])
 
             return ActionResult(text=confirm_text, task_time=command.time)  # уже существующий return
 
@@ -299,6 +297,7 @@ class TaskActionsService:
                 continue
             await complete_task(self.db, tid)
             self.scheduler_service.remove_scheduler_jobs(tid)
+            await sync_task_status(self.user, task, "complete")
             completed_titles.append(task['content'])
 
         if not completed_titles:
@@ -336,11 +335,14 @@ class TaskActionsService:
             return ActionResult(text=TaskMessages.task_not_found())
 
         # 3. Отправляем в Notion
-        success_count, errors = await add_tasks_to_notion(
+        success_count, errors, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
             notion_db_id=notion_db_id,
             tasks=tasks,
         )
+
+        for tid, pid in page_ids.items():
+            await set_task_notion_page_id(self.db, tid, pid)
 
         # Помечаем успешно добавленные задачи
         if success_count > 0:

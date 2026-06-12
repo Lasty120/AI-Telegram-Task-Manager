@@ -20,7 +20,6 @@ async def process_task_command(text: str, message, user, db):
     user_tasks = await get_user_tasks(db, user["id"])
     parsed_command = await parse_user_text(text, user_tasks)
 
-    await waiting_msg.delete()
 
     if isinstance(parsed_command, str):
         await message.answer(parsed_command)
@@ -59,6 +58,8 @@ async def process_task_command(text: str, message, user, db):
             separate_results.append(result)
         else:
             regular_results.append(result)
+
+    await waiting_msg.delete()
 
     # Группируем по дате
     if regular_results:

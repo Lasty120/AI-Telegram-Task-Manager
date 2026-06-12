@@ -6,6 +6,7 @@ from aiosqlite import Connection, Row
 
 from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages, NotificationMessages
+from services.notion.service import sync_task_status
 from services.scheduler import scheduler, send_task_notification, send_task_end_notification
 from config import TIMEZONE
 from services.tasks.actions import TaskActionsService
@@ -26,6 +27,7 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
         return
 
     await complete_task(db, task_id)
+    await sync_task_status(user, task, "complete")
 
     # Попытка удалить задачу из планировщика, если она там осталась
     try:
