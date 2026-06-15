@@ -312,8 +312,6 @@ class TaskActionsService:
             return ActionResult(text=TaskMessages.tasks_completed_plural(completed_titles), task_time=command.time)
 
     async def add_to_notion(self, command: TaskActionSchema) -> ActionResult:
-
-
         # 1. Проверяем, настроен ли Notion у пользователя
         notion_token = self.user["notion_token"]
         notion_db_id = self.user["notion_db_id"]
@@ -346,12 +344,7 @@ class TaskActionsService:
 
         # Помечаем успешно добавленные задачи
         if success_count > 0:
-            from database.crud.task import mark_tasks_notion_added
-            # Помечаем все task_ids — если были частичные ошибки,
-            # лучше пометить все и дать пользователю повторить вручную
-            added_ids = [
-                t["id"] for t in tasks
-            ][:success_count]  # первые success_count — оптимистично
+            added_ids = list(page_ids.keys())
             await mark_tasks_notion_added(self.db, added_ids)
 
         # 4. Формируем ответ
