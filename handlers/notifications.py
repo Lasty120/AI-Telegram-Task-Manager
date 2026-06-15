@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiosqlite import Connection, Row
+from apscheduler.jobstores.base import JobLookupError
 
 from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages, NotificationMessages
@@ -32,7 +33,7 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
     # Попытка удалить задачу из планировщика, если она там осталась
     try:
         scheduler.remove_job(f"task_{task_id}")
-    except Exception:
+    except JobLookupError:
         pass
 
     await callback.answer(TaskMessages.task_completed_success())

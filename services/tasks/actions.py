@@ -9,7 +9,7 @@ from database.crud.task import create_task, get_task_by_id, get_tasks_by_ids, up
 from keyboards.reply_keyboards import get_main_kb
 from keyboards.inline_keyboards import get_pagination_keyboard
 from utils.context import user_lang
-from config import TIMEZONE
+from config import TIMEZONE, TASKS_LIMIT_OF_PAGES
 from services.task_scheduler import TaskSchedulerService
 from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
@@ -239,7 +239,7 @@ class TaskActionsService:
             query=command.content or "поиск"
         )
 
-        limit = 10
+        limit = TASKS_LIMIT_OF_PAGES
         total_count = len(command.task_ids)
 
         tasks = await get_tasks_by_ids(
