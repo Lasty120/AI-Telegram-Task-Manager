@@ -10,7 +10,7 @@ from messages import TaskMessages, NotificationMessages
 from services.notion.service import sync_task_status
 from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
-from services.tasks.actions import TaskActionsService
+from services.tasks import ConflictService, SchedulerService
 
 router = Router()
 
@@ -109,10 +109,12 @@ async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, use
 
     action = parts[1]
 
-    action_service = TaskActionsService(db=db, user=user, bot=callback.message.bot)
+    # Инициализируем сервисы конфликтов и планировщика
+    scheduler_service = SchedulerService(bot=callback.message.bot, user=user)
+    conflict_service = ConflictService(db=db, user=user, scheduler_service=scheduler_service)
 
     if action == "ignore":
-        await action_service.resolve_conflict(action=action, message=callback.message)
+        await conflict_service.resolve_conflict(action=action, message=callback.message)
         return
 
     if len(parts) < 4:
@@ -122,9 +124,7 @@ async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, use
     new_task_id = int(parts[2])
     old_task_id = int(parts[3])
 
-
-    
-    await action_service.resolve_conflict(
+    await conflict_service.resolve_conflict(
         action=action,
         new_task_id=new_task_id,
         old_task_id=old_task_id,

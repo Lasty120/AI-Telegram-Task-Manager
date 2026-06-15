@@ -1,0 +1,123 @@
+from aiosqlite import Connection, Row
+
+from messages import NotionMessages, TaskMessages
+from database.schemas import TaskActionSchema
+from utils.action_result import ActionResult
+from services.notion.service import add_tasks_to_notion, sync_task_status
+from database.crud.task import get_tasks_by_ids, set_task_notion_page_id, mark_tasks_notion_added
+
+
+class NotionSyncService:
+    """
+    Сервис для синхронизации задач пользователя с Notion API.
+    Предоставляет методы для добавления задач и синхронизации их статуса.
+    """
+
+    def __init__(self, db: Connection, user: Row):
+        """
+        Инициализирует сервис Notion.
+        
+        Args:
+            db (Connection): Соединение с базой данных SQLite.
+            user (Row): Запись пользователя из БД.
+        """
+        self.db = db
+        self.user = user
+
+    async def add_to_notion(self, command: TaskActionSchema) -> ActionResult:
+        """
+        Экшен-метод для массовой отправки списка выбранных задач в Notion.
+        Используется в ответ на команду пользователя.
+        
+        Args:
+            command (TaskActionSchema): Параметры команды с идентификаторами задач.
+            
+        Returns:
+            ActionResult: Результат выполнения операции с текстовым подтверждением.
+        """
+        # 1. Проверяем, настроена ли интеграция с Notion у пользователя
+        notion_token = self.user["notion_token"]
+        notion_db_id = self.user["notion_db_id"]
+
+        if not notion_token or not notion_db_id:
+            return ActionResult(text=NotionMessages.not_configured())
+
+        # 2. Проверяем наличие переданных ID задач
+        if not command.task_ids:
+            return ActionResult(text=NotionMessages.no_tasks_to_send())
+
+        # 3. Загружаем задачи из локальной базы данных
+        tasks = await get_tasks_by_ids(
+            db=self.db,
+            task_ids=command.task_ids,
+            user_id=self.user["id"],
+        )
+
+        if not tasks:
+            return ActionResult(text=TaskMessages.task_not_found())
+
+        # 4. Отправляем задачи в Notion через API-интеграцию
+        success_count, errors, page_ids = await add_tasks_to_notion(
+            notion_token=notion_token,
+            notion_db_id=notion_db_id,
+            tasks=tasks,
+        )
+
+        # 5. Сохраняем полученные page_id для каждой созданной страницы в Notion
+        for tid, pid in page_ids.items():
+            await set_task_notion_page_id(self.db, tid, pid)
+
+        # 6. Отмечаем задачи в локальной базе как успешно добавленные в Notion
+        if success_count > 0:
+            added_ids = list(page_ids.keys())
+            await mark_tasks_notion_added(self.db, added_ids)
+
+        # 7. Возвращаем результат отправки со статусом и возможными ошибками
+        return ActionResult(
+            text=NotionMessages.tasks_sent(
+                success_count=success_count,
+                total=len(tasks),
+                errors=errors,
+            )
+        )
+
+    async def sync_task_status_to_notion(self, task: Row, status: str):
+        """
+        Отправляет обновление статуса задачи в Notion (например, "complete").
+        
+        Args:
+            task (Row): Запись задачи из БД.
+            status (str): Новый статус задачи.
+        """
+        await sync_task_status(self.user, task, status)
+
+    async def add_single_task_to_notion(self, task: Row) -> bool:
+        """
+        Вспомогательный метод для автоматического добавления одной свежесозданной задачи в Notion.
+        
+        Args:
+            task (Row): Новая задача.
+            
+        Returns:
+            bool: True, если задача успешно добавлена в Notion, иначе False.
+        """
+        user_dict = dict(self.user)
+        notion_token = user_dict.get("notion_token")
+        notion_db_id = user_dict.get("notion_db_id")
+
+        if not notion_token or not notion_db_id:
+            return False
+
+        # Отправляем одну задачу в Notion
+        success_count, _, page_ids = await add_tasks_to_notion(
+            notion_token=notion_token,
+            notion_db_id=notion_db_id,
+            tasks=[task],
+        )
+
+        # Если успешно, сохраняем page_id
+        if task['id'] in page_ids:
+            await set_task_notion_page_id(self.db, task['id'], page_ids[task['id']])
+            return True
+
+        return False

@@ -1,6 +1,6 @@
 
 from services.ai.service import parse_user_text
-from services.tasks.actions import TaskActionsService
+from services.tasks import TaskCRUDService, ConflictService, NotionSyncService, SchedulerService
 from database.crud.task import get_user_tasks
 from messages import AiMessages
 from keyboards.reply_keyboards import get_main_kb
@@ -32,7 +32,18 @@ async def process_task_command(text: str, message, user, db):
         await message.answer(AiMessages.no_tasks_found())
         return
 
-    action_service = TaskActionsService(db=db, user=user, bot=message.bot)
+    # Инициализация специализированных сервисов
+    scheduler_service = SchedulerService(bot=message.bot, user=user)
+    notion_service = NotionSyncService(db=db, user=user)
+    conflict_service = ConflictService(db=db, user=user, scheduler_service=scheduler_service)
+    crud_service = TaskCRUDService(
+        db=db,
+        user=user,
+        bot=message.bot,
+        conflict_service=conflict_service,
+        scheduler_service=scheduler_service,
+        notion_service=notion_service
+    )
 
     # Собираем результаты
     regular_results = []     # Обычные подтверждения — склеим в одно сообщение
@@ -40,17 +51,17 @@ async def process_task_command(text: str, message, user, db):
 
     for task_cmd in tasks:
         if task_cmd.action == "create":
-            result = await action_service.create(command=task_cmd)
+            result = await crud_service.create(command=task_cmd)
         elif task_cmd.action == "update":
-            result = await action_service.update(command=task_cmd)
+            result = await crud_service.update(command=task_cmd)
         elif task_cmd.action == "delete":
-            result = await action_service.delete(command=task_cmd)
+            result = await crud_service.delete(command=task_cmd)
         elif task_cmd.action == "select":
-            result = await action_service.select(command=task_cmd)
+            result = await crud_service.select(command=task_cmd)
         elif task_cmd.action == "forbidden":
             result = ActionResult(text=AiMessages.execution_error(task_cmd.content))
         elif task_cmd.action == "add-to-notion":
-            result = await action_service.add_to_notion(command=task_cmd)
+            result = await notion_service.add_to_notion(command=task_cmd)
         else:
             result = ActionResult(
                 text=AiMessages.unknown_action(task_cmd.content or text)

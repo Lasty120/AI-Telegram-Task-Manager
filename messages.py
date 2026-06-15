@@ -350,6 +350,15 @@ class TaskMessages:
         }
         return translations.get(lang, translations["ru"])
 
+    @classmethod
+    def conflict_task_not_found(cls):
+        lang = user_lang.get()
+        translations = {
+            "ru": "Ошибка: одна из конфликтующих задач не найдена.",
+            "en": "Error: One of conflict tasks not found."
+        }
+        return translations.get(lang, translations["ru"])
+
 
 class AiMessages:
     @classmethod
