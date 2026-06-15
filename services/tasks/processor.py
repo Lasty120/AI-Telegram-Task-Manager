@@ -22,11 +22,13 @@ async def process_task_command(text: str, message, user, db):
 
 
     if isinstance(parsed_command, str):
+        await waiting_msg.delete()
         await message.answer(parsed_command)
         return
 
     tasks = parsed_command.tasks
     if not tasks:
+        await waiting_msg.delete()
         await message.answer(AiMessages.no_tasks_found())
         return
 

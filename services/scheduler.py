@@ -66,38 +66,6 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 
 
-async def send_task_end_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
-    """Эта функция будет вызываться планировщиком при окончании задачи. ПОТЕНЦИАЛЬНО УДАЛИТЬ"""
-    try:
-        # Получаем язык пользователя из базы данных
-        lang = "ru"
-        try:
-            async with aiosqlite.connect(DB_PATH) as db:
-                db.row_factory = aiosqlite.Row
-                async with db.execute("SELECT lang FROM users WHERE tg_id = ?", (user_id,)) as cursor:
-                    row = await cursor.fetchone()
-                    if row:
-                        lang = row["lang"]
-        except Exception as db_err:
-            logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
-
-        token = user_lang.set(lang)
-        try:
-            pass
-            # text = TaskMessages.task_end_notification(task_text, task_details, task_importance)
-        finally:
-            user_lang.reset(token)
-
-        # await bot.send_message(
-        #     chat_id=user_id,
-        #     text=text,
-        #     parse_mode="HTML",
-        #     reply_markup=get_task_action_keyboard(task_id)
-        # )
-    except Exception as e:
-        logging.error(f"Не удалось отправить уведомление о конце задачи юзеру {user_id}: {e}")
-
-
 async def init_scheduler(bot: Bot):
     """Полная сборка планировщика: подключаемся к БД, забиваем задачи в очередь и стартуем"""
     tz = TIMEZONE
@@ -145,27 +113,6 @@ async def init_scheduler(bot: Bot):
                     replace_existing=True,
                     misfire_grace_time=3600
                 )
-
-            # 2. Напоминание о завершении задачи
-            if task_dur > 0:
-                task_end_time = task_time + timedelta(minutes=task_dur)
-                if task_end_time > now:
-                    scheduler.add_job(
-                        send_task_end_notification,
-                        trigger='date',
-                        run_date=task_end_time,
-                        kwargs={
-                            'bot': bot,
-                            'user_id': task['tg_id'],
-                            'task_text': task['content'],
-                            'task_details': task['details'],
-                            'task_id': task['id'],
-                            'task_importance': task_imp,
-                        },
-                        id=f"task_end_{task['id']}",
-                        replace_existing=True,
-                        misfire_grace_time=3600
-                    )
         except Exception as e:
             logging.error(f"Ошибка при загрузке задачи ID {task.get('id')} в планировщик: {e}")
 

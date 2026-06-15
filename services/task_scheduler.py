@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from aiogram import Bot
 from apscheduler.jobstores.base import JobLookupError
 
-from services.scheduler import scheduler, send_task_notification, send_task_end_notification
+from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
 
 
@@ -33,7 +33,6 @@ class TaskSchedulerService:
     def remove_scheduler_jobs(self, task_id: int):
         """Удаляет связанные работы из планировщика."""
         self.safe_remove_job(f"task_{task_id}")
-        self.safe_remove_job(f"task_end_{task_id}")
 
     def schedule_or_remove(self, job_id: str, run_date: datetime, notification_func, job_kwargs: dict):
         now = datetime.now(self.tz)
@@ -77,15 +76,3 @@ class TaskSchedulerService:
             notification_func=send_task_notification,
             job_kwargs=job_kwargs
         )
-
-        # 2. Задача на завершение
-        if duration and duration > 0:
-            task_end_time = localized_dt + timedelta(minutes=duration)
-            self.schedule_or_remove(
-                job_id=f"task_end_{task_id}",
-                run_date=task_end_time,
-                notification_func=send_task_end_notification,
-                job_kwargs=job_kwargs
-            )
-        else:
-            self.safe_remove_job(f"task_end_{task_id}")

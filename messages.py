@@ -292,37 +292,6 @@ class TaskMessages:
         return text
 
     @classmethod
-    def task_end_notification(cls, content: str, details: str = None, importance: str = None) -> str:
-        """
-        ПОТЕНЦИАЛЬНО УДАЛИТЬ
-        """
-        lang = user_lang.get()
-        escaped_content = hd.quote(content)
-        translations = {
-            "ru": {
-                "header": f"🏁 <b>Задача завершена:</b>\n{escaped_content}",
-                "details_label": "📝 <b>Детали:</b>",
-            },
-            "en": {
-                "header": f"🏁 <b>Task completed:</b>\n{escaped_content}",
-                "details_label": "📝 <b>Details:</b>",
-            },
-        }
-        t = translations.get(lang, translations["ru"])
-        
-        from utils.formatters import format_importance
-        imp_str = format_importance(importance, lang)
-        
-        text = t["header"]
-        if imp_str:
-            text = f"{imp_str} " + text
-            
-        if details:
-            escaped_details = hd.quote(details)
-            text += f"\n\n{t['details_label']}\n<i>{escaped_details}</i>"
-        return text
-
-    @classmethod
     def conflict_warning(cls, new_task_content: str, new_task_time: str, old_task_content: str, old_task_time: str) -> str:
         lang = user_lang.get()
         escaped_new = hd.quote(new_task_content)
@@ -507,12 +476,12 @@ class NotionMessages:
         translations = {
             "ru": (
                 "<b>Неверный формат токена!</b>\n\n"
-                "Токен Notion должен начинаться с <code>secret_</code>.\n"
+                "Токен Notion должен начинаться с <code>ntn_</code>.\n"
                 "Пожалуйста, отправьте корректный токен, пропустите шаг с помощью /skip или отмените регистрацию с помощью /cancel."
             ),
             "en": (
                 "<b>Invalid token format!</b>\n\n"
-                "Notion token must start with <code>secret_</code>.\n"
+                "Notion token must start with <code>ntn_</code>.\n"
                 "Please send a valid token, skip this step with /skip, or cancel with /cancel."
             )
         }

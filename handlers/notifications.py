@@ -7,7 +7,7 @@ from aiosqlite import Connection, Row
 from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages, NotificationMessages
 from services.notion.service import sync_task_status
-from services.scheduler import scheduler, send_task_notification, send_task_end_notification
+from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
 from services.tasks.actions import TaskActionsService
 
@@ -32,10 +32,6 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
     # Попытка удалить задачу из планировщика, если она там осталась
     try:
         scheduler.remove_job(f"task_{task_id}")
-    except Exception:
-        pass
-    try:
-        scheduler.remove_job(f"task_end_{task_id}")
     except Exception:
         pass
 
@@ -91,29 +87,7 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         replace_existing=True
     )
 
-    # Если есть длительность, перепланируем уведомление о завершении
-    task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 0
-    if task_dur > 0:
-        new_end_dt = new_time_dt + timedelta(minutes=task_dur)
-        scheduler.add_job(
-            send_task_end_notification,
-            trigger='date',
-            run_date=new_end_dt,
-            kwargs={
-                'bot': callback.message.bot,
-                'user_id': user['tg_id'],
-                'task_text': task['content'],
-                'task_details': task['details'],
-                'task_id': task_id
-            },
-            id=f"task_end_{task_id}",
-            replace_existing=True
-        )
-    else:
-        try:
-            scheduler.remove_job(f"task_end_{task_id}")
-        except Exception:
-            pass
+
 
     await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=True)
 
