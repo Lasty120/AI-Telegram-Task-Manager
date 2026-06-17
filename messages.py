@@ -77,7 +77,6 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
 
-
     @classmethod
     def invalid_request(cls) -> str:
         lang = user_lang.get()

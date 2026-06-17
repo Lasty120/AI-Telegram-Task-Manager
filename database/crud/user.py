@@ -45,3 +45,8 @@ async def update_user_notion(db: aiosqlite.Connection, tg_id: int, notion_token:
         (notion_token, notion_db_id, safe_tg_id)
     )
     await db.commit()
+
+
+async def get_all_users(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
+    async with db.execute("SELECT * FROM users") as cursor:
+        return await cursor.fetchall()

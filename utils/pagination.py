@@ -1,4 +1,5 @@
-﻿# utils/pagination.py
+# utils/pagination.py
+from aiogram import Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.exceptions import TelegramBadRequest
 from keyboards.inline_keyboards import get_pagination_keyboard
@@ -60,3 +61,15 @@ async def edit_paginated_message(
         # Подавляем исключение, если пользователь кликнул на активную страницу
         # и содержимое сообщения не изменилось
         pass
+
+
+async def send_paginated_message_to_chat(
+        bot: Bot, chat_id: int, text: str, total_count: int, limit: int, prefix: str
+):
+    """
+    Отправляет новое сообщение со списком и клавиатурой пагинации по chat_id.
+    """
+    final_text = get_paginated_text(text, 1, total_count, limit)
+    kb = get_pagination_keyboard(total_count, 1, limit, prefix)
+
+    await bot.send_message(chat_id, final_text, parse_mode='HTML', reply_markup=kb)

@@ -9,8 +9,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
 from keyboards.inline_keyboards import get_task_action_keyboard
-from config import DB_PATH, TIMEZONE
-
+from config import DB_PATH, TIMEZONE, TASKS_LIMIT_OF_PAGES as TASKS_LIMIT
+from database.crud.user import get_all_users
+from database.crud.task import get_user_today_tasks, get_user_today_tasks_count
+from utils.pagination import send_paginated_message_to_chat
+from utils.formatters import format_tasks_message
 from services.notion.service import update_task_status_in_notion
 
 # Создаем глобальный инстанс планировщика
@@ -116,6 +119,82 @@ async def init_scheduler(bot: Bot):
         except Exception as e:
             logging.error(f"Ошибка при загрузке задачи ID {task.get('id')} в планировщик: {e}")
 
+    # 2. Добавляем ежедневные задачи в 9:00 и 21:00
+    scheduler.add_job(
+        send_daily_tasks_summary,
+        trigger='cron',
+        hour=9,
+        minute=0,
+        args=[bot],
+        id="daily_tasks_morning",
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+    scheduler.add_job(
+        send_daily_tasks_summary,
+        trigger='cron',
+        hour=21,
+        minute=0,
+        args=[bot],
+        id="daily_tasks_evening",
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
     # 3. Запускаем тиканье планировщика
     scheduler.start()
     logging.info("APScheduler успешно запущен и наполнен задачами из БД.")
+
+
+async def send_daily_tasks_summary(bot: Bot):
+    """Отправляет всем пользователям список задач на сегодня в 9:00 и 21:00"""
+    logging.info("Запуск рассылки задач на сегодня...")
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            users = await get_all_users(db)
+            
+            # Для каждого пользователя получаем задачи за сегодня
+            now = datetime.now(TIMEZONE)
+            start_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0))
+            end_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59))
+            start_ts = int(start_of_day.timestamp())
+            end_ts = int(end_of_day.timestamp())
+            
+            for user in users:
+                user_id = user["id"]
+                tg_id = user["tg_id"]
+                lang = user["lang"]
+                
+                # Устанавливаем язык в контекст
+                token = user_lang.set(lang)
+                try:
+                    total_count = await get_user_today_tasks_count(db, user_id, start_ts, end_ts)
+                    # Если у пользователя нет задач, не отправляем пустое сообщение
+                    if total_count == 0:
+                        continue
+                        
+                    tasks = await get_user_today_tasks(db, user_id, start_ts, end_ts, limit=TASKS_LIMIT, offset=0)
+                    
+                    response_text = format_tasks_message(
+                        tasks=tasks,
+                        empty_text=TaskMessages.today_tasks_empty(),
+                    )
+
+                    full_text = f"{response_text}"
+                    
+                    # Отправляем сообщение с пагинацией
+                    await send_paginated_message_to_chat(
+                        bot=bot,
+                        chat_id=tg_id,
+                        text=full_text,
+                        total_count=total_count,
+                        limit=TASKS_LIMIT,
+                        prefix="page_today"
+                    )
+                except Exception as user_err:
+                    logging.error(f"Ошибка при отправке сводки задач пользователю {tg_id}: {user_err}")
+                finally:
+                    user_lang.reset(token)
+    except Exception as e:
+        logging.error(f"Ошибка при выполнении рассылки задач: {e}")
