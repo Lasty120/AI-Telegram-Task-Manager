@@ -598,23 +598,62 @@ class NotionMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def registration_success(cls, token: str | None, db_id: str | None) -> str:
+    def registration_success(
+        cls, 
+        token: str | None, 
+        db_id: str | None, 
+        notified_status: str | None = None, 
+        completed_status: str | None = None
+    ) -> str:
         lang = user_lang.get()
         token_str = token[:4] + "..." + token[-4:] if token else "—"
         db_id_str = db_id if db_id else "—"
+        notified_str = notified_status if notified_status else "—"
+        completed_str = completed_status if completed_status else "—"
         translations = {
             "ru": (
                 "<b>Регистрация Notion успешно завершена!</b>\n\n"
                 f"• Ключ интеграции: <code>{token_str}</code>\n"
-                f"• ID базы данных: <code>{db_id_str}</code>\n\n"
-                "Все настройки сохранены. Теперь ваши задачи могут синхронизироваться с Notion."
+                f"• ID базы данных: <code>{db_id_str}</code>\n"
+                f"• Статус при уведомлении: <code>{notified_str}</code>\n"
+                f"• Статус при выполнении: <code>{completed_str}</code>\n\n"
+                "Все настройки сохранены. Теперь ваши задачи будут синхронизироваться с Notion."
             ),
             "en": (
                 "<b>Notion registration completed successfully!</b>\n\n"
                 f"• Integration Key: <code>{token_str}</code>\n"
-                f"• Database ID: <code>{db_id_str}</code>\n\n"
-                "All settings saved. Now your tasks can synchronize with Notion."
+                f"• Database ID: <code>{db_id_str}</code>\n"
+                f"• Notification status: <code>{notified_str}</code>\n"
+                f"• Completion status: <code>{completed_str}</code>\n\n"
+                "All settings saved. Now your tasks will synchronize with Notion."
             )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def ask_notified_status(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Выберите статус в Notion, который будет устанавливаться для задачи, когда на неё пришло уведомление:",
+            "en": "Select the Notion status to be set for a task when a notification for it arrives:"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def ask_completed_status(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Выберите статус в Notion, который будет устанавливаться для выполненных задач:",
+            "en": "Select the Notion status to be set for completed tasks:"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def invalid_status_selection(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Пожалуйста, выберите один из статусов на клавиатуре или введите его имя точно так же, как написано.",
+            "en": "Please select one of the statuses on the keyboard or type its name exactly as written."
         }
         return translations.get(lang, translations["ru"])
 

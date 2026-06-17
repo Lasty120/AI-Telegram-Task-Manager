@@ -10,7 +10,9 @@ async def init_db(db_path: str):
             tg_id INTEGER UNIQUE NOT NULL,
             lang TEXT DEFAULT 'ru',
             notion_db_id TEXT,
-            notion_token TEXT
+            notion_token TEXT,
+            notion_status_notified TEXT,
+            notion_status_completed TEXT
         );
 
         CREATE TABLE IF NOT EXISTS tasks (
@@ -44,6 +46,10 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE users ADD COLUMN notion_db_id TEXT;")
             if "notion_token" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_token TEXT;")
+            if "notion_status_notified" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_status_notified TEXT;")
+            if "notion_status_completed" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_status_completed TEXT;")
 
         async with db.execute("PRAGMA table_info(tasks);") as cursor:
             columns = await cursor.fetchall()

@@ -29,7 +29,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
                 db.row_factory = aiosqlite.Row
                 async with db.execute(
                     """
-                    SELECT users.lang, users.notion_token, users.notion_db_id, tasks.notion_page_id
+                    SELECT users.lang, users.notion_token, users.notion_db_id, users.notion_status_notified, tasks.notion_page_id
                     FROM users
                     JOIN tasks ON tasks.user_id = users.id
                     WHERE users.tg_id = ? AND tasks.id = ?
@@ -42,6 +42,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
                         notion_token = row["notion_token"]
                         notion_db_id = row["notion_db_id"]
                         notion_page_id = row["notion_page_id"]
+                        notion_status_notified = row["notion_status_notified"]
         except Exception as db_err:
             logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
 
@@ -64,6 +65,7 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
                 notion_db_id=notion_db_id,
                 page_id=notion_page_id,
                 target_group="in_progress",
+                custom_status_name=notion_status_notified,
             )
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")

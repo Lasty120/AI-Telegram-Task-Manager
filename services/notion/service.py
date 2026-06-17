@@ -1,4 +1,4 @@
-﻿import aiohttp
+import aiohttp
 from datetime import datetime
 from config import TIMEZONE
 import logging
@@ -150,16 +150,30 @@ def _resolve_status_option(status_schema: dict, target_group: str) -> str | None
     return options.get(option_ids[0])
 
 
+async def get_notion_status_options(notion_token: str, notion_db_id: str) -> list[str]:
+    """
+    Возвращает список названий опций статуса в базе данных Notion.
+    """
+    headers = {
+        "Authorization": f"Bearer {notion_token}",
+        "Notion-Version": "2022-06-28",
+    }
+    status_schema = await _get_status_property(notion_db_id, headers)
+    if not status_schema or "options" not in status_schema:
+        return []
+    return [opt["name"] for opt in status_schema["options"]]
+
+
 async def update_task_status_in_notion(
     notion_token: str,
     notion_db_id: str,
     page_id: str,
-    target_group: str,  # "in_progress" | "complete"
+    target_group: str = None,  # "in_progress" | "complete"
+    custom_status_name: str = None,
 ) -> bool:
     """
-    Переводит страницу Notion в указанную группу статуса.
-    Возвращает False, если у базы нет свойства status или нужная группа пустая —
-    это не ошибка, просто "у этого юзера статусы не настроены так, как мы ожидаем".
+    Переводит страницу Notion в указанную группу статуса или конкретный статус по имени.
+    Возвращает False, если у базы нет свойства status или нужная группа/статус пустой.
     """
     headers = {
         "Authorization": f"Bearer {notion_token}",
@@ -171,7 +185,10 @@ async def update_task_status_in_notion(
     if not status_schema:
         return False
 
-    option_name = _resolve_status_option(status_schema, target_group)
+    option_name = custom_status_name
+    if not option_name and target_group:
+        option_name = _resolve_status_option(status_schema, target_group)
+
     if not option_name:
         return False
 
@@ -196,12 +213,19 @@ async def sync_task_status(user, task, target_group: str):
     if not (page_id and token and db_id):
         return
 
+    custom_status_name = None
+    if target_group == "complete":
+        custom_status_name = user["notion_status_completed"] if "notion_status_completed" in user.keys() else None
+    elif target_group == "in_progress":
+        custom_status_name = user["notion_status_notified"] if "notion_status_notified" in user.keys() else None
+
     try:
         ok = await update_task_status_in_notion(
             notion_token=token,
             notion_db_id=db_id,
             page_id=page_id,
             target_group=target_group,
+            custom_status_name=custom_status_name,
         )
         if not ok:
             logging.warning(f"Notion: не удалось обновить статус задачи {task['id']}")

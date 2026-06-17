@@ -84,4 +84,12 @@ def get_pagination_keyboard(total_count: int, current_page: int, limit: int, pre
     return builder.as_markup()
 
 
+def get_status_selection_keyboard(options: list[str]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for idx, opt in enumerate(options):
+        builder.button(text=opt, callback_data=f"select_status:{idx}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 
