@@ -13,11 +13,13 @@ def get_main_kb(opt_lang: str = None):
         translations = {
             "ru": {
                 "my_tasks": "Мои задачи",
-                "completed": "Мои выполненные задачи"
+                "completed": "Мои выполненные задачи",
+                "today_tasks": "Задачи на сегодня"
             },
             "en": {
                 "my_tasks": "My tasks",
-                "completed": "My completed tasks"
+                "completed": "My completed tasks",
+                "today_tasks": "Tasks for today"
             }
         }
         # Логика для обработки смены  клавиатуры при смене языка
@@ -29,6 +31,8 @@ def get_main_kb(opt_lang: str = None):
 
         builder.button(text=t["my_tasks"])
         builder.button(text=t["completed"])
+        builder.button(text=t["today_tasks"])
+        builder.adjust(2, 1)
 
         return builder.as_markup(resize_keyboard=True)
 

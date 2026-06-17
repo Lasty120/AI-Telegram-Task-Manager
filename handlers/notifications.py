@@ -10,7 +10,7 @@ from messages import TaskMessages, NotificationMessages
 from services.notion.service import sync_task_status
 from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
-from services.tasks import ConflictService, SchedulerService
+from services.tasks import ConflictService, SchedulerService, NotionSyncService
 
 router = Router()
 
@@ -106,30 +106,38 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
 @router.callback_query(F.data.startswith("resolve_conflict:"))
 async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, user: Row):
     parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer(TaskMessages.invalid_request(), show_alert=True)
+        return
 
     action = parts[1]
-
-    # Инициализируем сервисы конфликтов и планировщика
-    scheduler_service = SchedulerService(bot=callback.message.bot, user=user)
-    conflict_service = ConflictService(db=db, user=user, scheduler_service=scheduler_service)
-
-    if action == "ignore":
-        await conflict_service.resolve_conflict(action=action, message=callback.message)
-        return
-
-    if len(parts) < 4:
-        await callback.answer("Некорректный запрос", show_alert=True)
-        return
-
     new_task_id = int(parts[2])
     old_task_id = int(parts[3])
+    add_to_notion = parts[4] == "1"
 
-    await conflict_service.resolve_conflict(
+    # Инициализируем планировщик, Notion и конфликт-сервисы
+    scheduler_service = SchedulerService(bot=callback.message.bot, user=user)
+    notion_service = NotionSyncService(db=db, user=user)
+    conflict_service = ConflictService(
+        db=db,
+        user=user,
+        scheduler_service=scheduler_service,
+        notion_service=notion_service
+    )
+
+    msg_text = await conflict_service.resolve_conflict(
         action=action,
         new_task_id=new_task_id,
         old_task_id=old_task_id,
-        message=callback.message
+        add_to_notion=add_to_notion
     )
+
     await callback.answer()
+    if msg_text:
+        await callback.message.edit_text(
+            text=msg_text,
+            parse_mode="HTML",
+            reply_markup=None
+        )
 
 

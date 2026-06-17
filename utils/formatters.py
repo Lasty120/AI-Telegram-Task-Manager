@@ -3,6 +3,7 @@ from collections import defaultdict
 from aiogram.utils.markdown import html_decoration as hd
 from utils.context import user_lang
 from config import TIMEZONE
+from database.models import TaskStatus
 
 
 def format_date_header(dt: datetime, lang: str) -> str:
@@ -128,6 +129,10 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
 
             for task_datetime, task in bucket_tasks:
                 escaped_content = hd.quote(task['content'])
+                is_completed = task['status'] == TaskStatus.COMPLETED.value if 'status' in task.keys() else False
+                if is_completed:
+                    escaped_content = f"<s>{escaped_content}</s>"
+
                 formatted_time = task_datetime.strftime('%H:%M')
 
                 if 'duration' in task.keys() and task['duration']:
@@ -143,6 +148,8 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
                 task_line = f"{local_indices[task['id']]}. [#{task['id']}] <b>{escaped_content}</b>  {time_str}"
                 if task['details']:
                     escaped_details = hd.quote(task['details'])
+                    if is_completed:
+                        escaped_details = f"<s>{escaped_details}</s>"
                     task_line += f"\n   {escaped_details}"
                 task_line += "\n"
 

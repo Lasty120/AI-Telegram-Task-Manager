@@ -17,6 +17,7 @@ from utils.action_result import ActionResult
 from services.tasks.conflict import ConflictService
 from services.tasks.scheduler import SchedulerService
 from services.tasks.notion_sync import NotionSyncService
+from keyboards.inline_keyboards import get_conflict_resolution_keyboard
 
 
 class TaskCRUDService:
@@ -110,7 +111,7 @@ class TaskCRUDService:
 
         # 5. Если обнаружен конфликт, возвращаем интерактивную форму для разрешения коллизии
         if conflict_task:
-            from keyboards.inline_keyboards import get_conflict_resolution_keyboard
+
             warning_text = TaskMessages.conflict_warning(
                 new_task_content=command.content,
                 new_task_time=display_time,
@@ -123,7 +124,8 @@ class TaskCRUDService:
                 old_task_id=conflict_task['id'],
                 new_task_id=new_task_id,
                 old_task_content=conflict_task['content'],
-                new_task_content=command.content
+                new_task_content=command.content,
+                add_to_notion=command.add_to_notion
             )
             return ActionResult(text=warning_text, keyboard=kb, send_separately=True)
 

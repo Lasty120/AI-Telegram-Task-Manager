@@ -6,6 +6,7 @@ from config import TIMEZONE
 from database.crud.task import get_user_tasks, get_task_by_id, update_task
 from messages import TaskMessages
 from services.tasks.scheduler import SchedulerService
+from services.tasks.notion_sync import NotionSyncService
 
 
 class ConflictService:
@@ -14,7 +15,7 @@ class ConflictService:
     Помогает находить свободное время для задач и автоматически сдвигать задачи при коллизиях.
     """
 
-    def __init__(self, db: Connection, user: Row, scheduler_service: SchedulerService):
+    def __init__(self, db: Connection, user: Row, scheduler_service: SchedulerService, notion_service: NotionSyncService = None):
         """
         Инициализирует сервис конфликтов.
         
@@ -22,10 +23,12 @@ class ConflictService:
             db (Connection): Соединение с базой данных.
             user (Row): Запись пользователя из БД.
             scheduler_service (SchedulerService): Сервис для обновления напоминаний.
+            notion_service (NotionSyncService, optional): Сервис для синхронизации с Notion.
         """
         self.db = db
         self.user = user
         self.scheduler_service = scheduler_service
+        self.notion_service = notion_service
         self.tz = TIMEZONE
 
     async def find_first_free_slot(self, duration_mins: int, exclude_task_id: int = None) -> datetime:
@@ -109,7 +112,13 @@ class ConflictService:
                 return task
         return None
 
-    async def resolve_conflict(self, action: str, message: Message, new_task_id: int = None, old_task_id: int = None):
+    async def resolve_conflict(
+            self,
+            action: str,
+            new_task_id: int = None,
+            old_task_id: int = None,
+            add_to_notion: bool = False,
+    ) -> str:
         """
         Разрешает конфликт между новой и старой задачами на основе выбора пользователя:
         - "ignore": оставляет всё как есть.
@@ -118,29 +127,27 @@ class ConflictService:
         
         Args:
             action (str): Выбранное действие ("ignore", "move_old", "move_new").
-            message (Message): Сообщение в Telegram, подлежащее изменению с текстом разрешения.
             new_task_id (int, optional): ID новой задачи.
             old_task_id (int, optional): ID старой задачи.
+            add_to_notion (bool): Флаг добавления новой задачи в Notion.
+            
+        Returns:
+            str: Текст ответа для пользователя.
         """
         # 1. Быстрый выход для игнора конфликта
         if action == "ignore":
-            await message.edit_text(
-                TaskMessages.conflict_ignore(),
-                parse_mode="HTML",
-                reply_markup=None
-            )
-            return
+            if add_to_notion and self.notion_service and new_task_id:
+                new_task = await get_task_by_id(self.db, new_task_id)
+                if new_task:
+                    await self.notion_service.add_single_task_to_notion(new_task)
+            return TaskMessages.conflict_ignore()
 
         # 2. Получаем задачи из базы данных для проверки их существования
         new_task = await get_task_by_id(self.db, new_task_id)
         old_task = await get_task_by_id(self.db, old_task_id)
 
         if not new_task or not old_task:
-            await message.edit_text(
-                TaskMessages.conflict_task_not_found(),
-                reply_markup=None
-            )
-            return
+            return TaskMessages.conflict_task_not_found()
 
         new_duration = new_task['duration'] if 'duration' in new_task.keys() and new_task['duration'] else 30
         old_duration = old_task['duration'] if 'duration' in old_task.keys() and old_task['duration'] else 30
@@ -166,7 +173,14 @@ class ConflictService:
             importance=target_task['importance'] if 'importance' in target_task.keys() else None
         )
 
-        # 6. Отправляем пользователю результат разрешения коллизии
+        # 6. Синхронизируем новую задачу с Notion при необходимости
+        if add_to_notion and self.notion_service and new_task_id:
+            # Получаем обновленный объект новой задачи (на случай, если сдвинули её время)
+            updated_new_task = await get_task_by_id(self.db, new_task_id)
+            if updated_new_task:
+                await self.notion_service.add_single_task_to_notion(updated_new_task)
+
+        # 7. Отправляем пользователю результат разрешения коллизии
         new_dt_str = new_dt.strftime("%Y-%m-%d %H:%M")
 
         if action == "move_old":
@@ -186,4 +200,4 @@ class ConflictService:
                 old_time=display_old_time
             )
 
-        await message.edit_text(msg_text, parse_mode="HTML", reply_markup=None)
+        return msg_text

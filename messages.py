@@ -67,6 +67,25 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
 
+    @classmethod
+    def today_tasks_empty(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "У вас нет задач на сегодня.",
+            "en": "You have no tasks for today."
+        }
+        return translations.get(lang, translations["ru"])
+
+
+
+    @classmethod
+    def invalid_request(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Некорректный запрос",
+            "en": "Invalid request"
+        }
+        return translations.get(lang, translations["ru"])
 
     @classmethod
     def invalid_time_format(cls) -> str:

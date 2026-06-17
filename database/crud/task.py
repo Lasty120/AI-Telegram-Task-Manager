@@ -229,10 +229,52 @@ async def mark_tasks_notion_added(db: aiosqlite.Connection, task_ids: list[int])
     await db.commit()
 
 
-async def set_task_notion_page_id(db: aiosqlite.Connection, task_id: int, page_id: str):
+async def  set_task_notion_page_id(db: aiosqlite.Connection, task_id: int, page_id: str):
     """Сохраняет ID страницы Notion и помечает задачу как добавленную."""
     await db.execute(
         "UPDATE tasks SET notion_added = 1, notion_page_id = ? WHERE id = ?",
         (page_id, task_id)
     )
     await db.commit()
+
+
+async def get_user_today_tasks(
+    db: aiosqlite.Connection, 
+    user_id: int, 
+    start_time: int,
+    end_time: int,
+    limit: int = None, 
+    offset: int = None
+) -> list[aiosqlite.Row]:
+    """
+    Получает все задачи (активные и выполненные) конкретного пользователя за указанный интервал времени (сегодня).
+    Поддерживает пагинацию с помощью параметров limit и offset.
+    """
+    query = "SELECT * FROM tasks WHERE user_id = ? AND time >= ? AND time <= ? ORDER BY time ASC"
+    params = [user_id, start_time, end_time]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    if offset is not None:
+        query += " OFFSET ?"
+        params.append(offset)
+        
+    async with db.execute(query, tuple(params)) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_user_today_tasks_count(
+    db: aiosqlite.Connection, 
+    user_id: int,
+    start_time: int,
+    end_time: int
+) -> int:
+    """
+    Возвращает общее количество задач пользователя за указанный интервал времени (сегодня).
+    """
+    async with db.execute(
+        "SELECT COUNT(*) FROM tasks WHERE user_id = ? AND time >= ? AND time <= ?",
+        (user_id, start_time, end_time)
+    ) as cursor:
+        row = await cursor.fetchone()
+        return row[0] if row else 0

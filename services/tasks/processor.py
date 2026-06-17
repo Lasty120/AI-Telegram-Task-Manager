@@ -35,7 +35,12 @@ async def process_task_command(text: str, message, user, db):
     # Инициализация специализированных сервисов
     scheduler_service = SchedulerService(bot=message.bot, user=user)
     notion_service = NotionSyncService(db=db, user=user)
-    conflict_service = ConflictService(db=db, user=user, scheduler_service=scheduler_service)
+    conflict_service = ConflictService(
+        db=db,
+        user=user,
+        scheduler_service=scheduler_service,
+        notion_service=notion_service
+    )
     crud_service = TaskCRUDService(
         db=db,
         user=user,

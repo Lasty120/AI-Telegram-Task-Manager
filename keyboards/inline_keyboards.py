@@ -33,7 +33,7 @@ def get_task_action_keyboard(task_id: int):
     return builder.as_markup()
 
 
-def get_conflict_resolution_keyboard(old_task_id: int, new_task_id: int, old_task_content: str, new_task_content: str) -> InlineKeyboardMarkup:
+def get_conflict_resolution_keyboard(old_task_id: int, new_task_id: int, old_task_content: str, new_task_content: str, add_to_notion: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     lang = user_lang.get()
 
@@ -57,9 +57,10 @@ def get_conflict_resolution_keyboard(old_task_id: int, new_task_id: int, old_tas
     }
 
     t = translations.get(lang, translations["ru"])
-    builder.button(text=t["move_old"], callback_data=f"resolve_conflict:move_old:{new_task_id}:{old_task_id}")
-    builder.button(text=t["move_new"], callback_data=f"resolve_conflict:move_new:{new_task_id}:{old_task_id}")
-    builder.button(text=t["ignore"], callback_data=f"resolve_conflict:ignore")
+    notion_flag = "1" if add_to_notion else "0"
+    builder.button(text=t["move_old"], callback_data=f"resolve_conflict:move_old:{new_task_id}:{old_task_id}:{notion_flag}")
+    builder.button(text=t["move_new"], callback_data=f"resolve_conflict:move_new:{new_task_id}:{old_task_id}:{notion_flag}")
+    builder.button(text=t["ignore"], callback_data=f"resolve_conflict:ignore:{new_task_id}:{old_task_id}:{notion_flag}")
     builder.adjust(1)
     return builder.as_markup()
 
