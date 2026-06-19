@@ -696,3 +696,87 @@ class NotionMessages:
                 joined = "\n".join(f"• {e}" for e in errors[:3])
                 text += f"\n\nОшибки:\n{joined}"
         return text
+
+    @classmethod
+    def ask_notion_user(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Выберите свой аккаунт в списке участников Notion:</b>",
+            "en": "<b>Select your account from the Notion participants list:</b>"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_users_loading(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "⏳ Получение списка участников из Notion... Пожалуйста, подождите.",
+            "en": "⏳ Retrieving participants list from Notion... Please wait."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_users_empty(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Не удалось найти активных участников в Notion!</b>\n\nУбедитесь, что у вашей интеграции включены разрешения (Capabilities) на чтение пользователей.",
+            "en": "<b>Could not find active participants in Notion!</b>\n\nMake sure your integration has read users permissions (Capabilities) enabled."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_user_approval_pending(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Запрос отправлен!</b>\n\nВаш запрос на привязку аккаунта Notion отправлен администраторам на одобрение. Бот уведомит вас, как только запрос будет одобрен.",
+            "en": "<b>Request sent!</b>\n\nYour Notion account linking request has been sent to admins for approval. The bot will notify you as soon as it is approved."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_user_approved_user(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "🎉 <b>Ваша интеграция с Notion одобрена администратором!</b>\n\nТеперь вы можете полноценно пользоваться ботом и синхронизировать задачи.",
+            "en": "🎉 <b>Your Notion integration has been approved by the admin!</b>\n\nNow you can fully use the bot and sync tasks."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_user_rejected_user(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "❌ <b>Ваш запрос на интеграцию с Notion был отклонен администратором.</b>\n\nПожалуйста, свяжитесь с администрацией или попробуйте привязать заново.",
+            "en": "❌ <b>Your Notion integration request was rejected by the admin.</b>\n\nPlease contact the administrator or try linking again."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_admin_approval_request(cls, username: str | None, notion_user_name: str) -> str:
+        lang = user_lang.get()
+        user_str = f"@{username}" if username else "Пользователь без username"
+        translations = {
+            "ru": f"{user_str} пытается войти в ноушн под именем {notion_user_name}",
+            "en": f"{user_str} is trying to log in to Notion as {notion_user_name}"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_admin_approved(cls, username: str | None, notion_user_name: str) -> str:
+        lang = user_lang.get()
+        user_str = f"@{username}" if username else "Пользователь"
+        translations = {
+            "ru": f"✅ Запрос одобрен: {user_str} вошел в ноушн под именем {notion_user_name}",
+            "en": f"✅ Request approved: {user_str} logged in to Notion as {notion_user_name}"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_admin_rejected(cls, username: str | None, notion_user_name: str) -> str:
+        lang = user_lang.get()
+        user_str = f"@{username}" if username else "Пользователь"
+        translations = {
+            "ru": f"❌ Запрос отклонен для {user_str} (Ноушн: {notion_user_name})",
+            "en": f"❌ Request rejected for {user_str} (Notion: {notion_user_name})"
+        }
+        return translations.get(lang, translations["ru"])

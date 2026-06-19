@@ -53,10 +53,70 @@ async def update_user_notion(
         SET notion_token = ?, 
             notion_db_id = ?, 
             notion_status_notified = ?, 
-            notion_status_completed = ? 
+            notion_status_completed = ?,
+            notion_user_id = NULL,
+            notion_user_name = NULL
         WHERE tg_id = ?
         """,
         (notion_token, notion_db_id, notion_status_notified, notion_status_completed, safe_tg_id)
+    )
+    await db.commit()
+
+
+async def update_user_pending_notion(
+    db: aiosqlite.Connection,
+    tg_id: int,
+    pending_id: str,
+    pending_name: str
+):
+    """
+    Обновляет временные (ожидающие одобрения) данные пользователя Notion в БД.
+    """
+    safe_tg_id = int(tg_id)
+    await db.execute(
+        """
+        UPDATE users 
+        SET pending_notion_user_id = ?, 
+            pending_notion_user_name = ? 
+        WHERE tg_id = ?
+        """,
+        (pending_id, pending_name, safe_tg_id)
+    )
+    await db.commit()
+
+
+async def approve_user_pending_notion(db: aiosqlite.Connection, tg_id: int):
+    """
+    Одобряет привязку аккаунта Notion: переносит данные из pending в основные колонки.
+    """
+    safe_tg_id = int(tg_id)
+    await db.execute(
+        """
+        UPDATE users 
+        SET notion_user_id = pending_notion_user_id, 
+            notion_user_name = pending_notion_user_name,
+            pending_notion_user_id = NULL,
+            pending_notion_user_name = NULL
+        WHERE tg_id = ?
+        """,
+        (safe_tg_id,)
+    )
+    await db.commit()
+
+
+async def reject_user_pending_notion(db: aiosqlite.Connection, tg_id: int):
+    """
+    Отклоняет привязку аккаунта Notion: очищает временные данные.
+    """
+    safe_tg_id = int(tg_id)
+    await db.execute(
+        """
+        UPDATE users 
+        SET pending_notion_user_id = NULL, 
+            pending_notion_user_name = NULL
+        WHERE tg_id = ?
+        """,
+        (safe_tg_id,)
     )
     await db.commit()
 

@@ -92,4 +92,23 @@ def get_status_selection_keyboard(options: list[str]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def get_notion_users_keyboard(users: list[dict]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for idx, u in enumerate(users):
+        name = u["name"]
+        if len(name) > 30:
+            name = name[:27] + "..."
+        builder.button(text=name, callback_data=f"select_notion_user:{idx}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_admin_approval_keyboard(user_tg_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Одобрить ✅", callback_data=f"approve_notion:{user_tg_id}")
+    builder.button(text="Отклонить ❌", callback_data=f"reject_notion:{user_tg_id}")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
 

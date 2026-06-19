@@ -8,6 +8,7 @@ async def add_tasks_to_notion(
     notion_token: str,
     notion_db_id: str,
     tasks: list,
+    notion_user_id: str | None = None,
 ) -> tuple[int, list[str], dict[int, str]]:
     """
     Создаёт страницы в Notion для каждой задачи.
@@ -28,7 +29,7 @@ async def add_tasks_to_notion(
     async with aiohttp.ClientSession() as session:
         for task in tasks:
             try:
-                page_body = _build_page_body(notion_db_id, task, db_props)
+                page_body = _build_page_body(notion_db_id, task, db_props, notion_user_id)
                 async with session.post(
                     "https://api.notion.com/v1/pages",
                     headers=headers,
@@ -60,7 +61,12 @@ async def _get_db_properties(db_id: str, headers: dict) -> dict:
             return {k: v["type"] for k, v in data.get("properties", {}).items()}
 
 
-def _build_page_body(db_id: str, task, db_props: dict) -> dict:
+def _build_page_body(
+    db_id: str,
+    task,
+    db_props: dict,
+    notion_user_id: str | None = None,
+) -> dict:
     """
     Формирует тело запроса /v1/pages.
     Автоматически маппит поля задачи на свойства БД.
@@ -103,6 +109,20 @@ def _build_page_body(db_id: str, task, db_props: dict) -> dict:
     )
     if select_prop and task.get("importance"):
         properties[select_prop] = {"select": {"name": task["importance"]}}
+
+    # Создатель — ищем поле типа "people"
+    people_prop = next(
+        (k for k, v in db_props.items() if v == "people"), None
+    )
+    if people_prop and notion_user_id:
+        properties[people_prop] = {
+            "people": [
+                {
+                    "object": "user",
+                    "id": notion_user_id
+                }
+            ]
+        }
 
     return {
         "parent": {"database_id": db_id},
@@ -231,3 +251,44 @@ async def sync_task_status(user, task, target_group: str):
             logging.warning(f"Notion: не удалось обновить статус задачи {task['id']}")
     except Exception as e:
         logging.error(f"Notion: ошибка синхронизации статуса задачи {task['id']}: {e}")
+
+
+async def get_notion_workspace_users(notion_token: str) -> list[dict]:
+    """
+    Получает список всех участников (пользователей типа person) воркспейса Notion.
+    """
+    headers = {
+        "Authorization": f"Bearer {notion_token}",
+        "Notion-Version": "2022-06-28",
+    }
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(
+                "https://api.notion.com/v1/users",
+                headers=headers,
+            ) as resp:
+                if resp.status != 200:
+                    logging.error(f"Notion API error in get_notion_workspace_users: {resp.status}")
+                    return []
+                data = await resp.json()
+                users = []
+                # Фильтруем участников, берем только людей (person)
+                for u in data.get("results", []):
+                    if u.get("type") == "person":
+                        name = u.get("name") or u.get("person", {}).get("email") or "Unknown"
+                        users.append({
+                            "id": u.get("id"),
+                            "name": name
+                        })
+                # Если людей не нашли, возвращаем всех
+                if not users:
+                    for u in data.get("results", []):
+                        name = u.get("name") or "Unknown"
+                        users.append({
+                            "id": u.get("id"),
+                            "name": name
+                        })
+                return users
+        except Exception as e:
+            logging.error(f"Error calling Notion API in get_notion_workspace_users: {e}")
+            return []

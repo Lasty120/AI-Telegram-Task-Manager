@@ -57,10 +57,12 @@ class NotionSyncService:
             return ActionResult(text=TaskMessages.task_not_found())
 
         # 4. Отправляем задачи в Notion через API-интеграцию
+        notion_user_id = self.user["notion_user_id"] if "notion_user_id" in self.user.keys() else None
         success_count, errors, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
             notion_db_id=notion_db_id,
             tasks=tasks,
+            notion_user_id=notion_user_id,
         )
 
         # 5. Сохраняем полученные page_id для каждой созданной страницы в Notion
@@ -109,10 +111,12 @@ class NotionSyncService:
             return False
 
         # Отправляем одну задачу в Notion
+        notion_user_id = user_dict.get("notion_user_id")
         success_count, _, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
             notion_db_id=notion_db_id,
             tasks=[task],
+            notion_user_id=notion_user_id,
         )
 
         # Если успешно, сохраняем page_id
