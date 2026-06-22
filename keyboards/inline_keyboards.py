@@ -93,12 +93,21 @@ def get_status_selection_keyboard(options: list[str]) -> InlineKeyboardMarkup:
 
 
 def get_notion_users_keyboard(users: list[dict]) -> InlineKeyboardMarkup:
+    # Клавиатура для выбора участника из Notion (показываем имя и email при наличии)
     builder = InlineKeyboardBuilder()
     for idx, u in enumerate(users):
-        name = u["name"]
-        if len(name) > 30:
-            name = name[:27] + "..."
-        builder.button(text=name, callback_data=f"select_notion_user:{idx}")
+        callback_idx = u.get("original_index", idx)
+        
+        email = u.get("email")
+        if email:
+            display_name = f"{u['name']} ({email})"
+        else:
+            display_name = u["name"]
+            
+        if len(display_name) > 30:
+            display_name = display_name[:27] + "..."
+            
+        builder.button(text=display_name, callback_data=f"select_notion_user:{callback_idx}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -109,6 +118,19 @@ def get_admin_approval_keyboard(user_tg_id: int) -> InlineKeyboardMarkup:
     builder.button(text="Отклонить ❌", callback_data=f"reject_notion:{user_tg_id}")
     builder.adjust(2)
     return builder.as_markup()
+
+
+def get_notion_data_sources_keyboard(data_sources: list[dict]) -> InlineKeyboardMarkup:
+    # Клавиатура для выбора источника данных (Data Source) из списка
+    builder = InlineKeyboardBuilder()
+    for idx, ds in enumerate(data_sources):
+        name = ds.get("name") or "Unnamed Source"
+        if len(name) > 30:
+            name = name[:27] + "..."
+        builder.button(text=name, callback_data=f"select_data_source:{idx}")
+    builder.adjust(1)
+    return builder.as_markup()
+
 
 
 

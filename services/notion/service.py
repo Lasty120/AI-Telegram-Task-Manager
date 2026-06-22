@@ -16,7 +16,7 @@ async def add_tasks_to_notion(
     """
     headers = {
         "Authorization": f"Bearer {notion_token}",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": "2025-09-03",
         "Content-Type": "application/json",
     }
 
@@ -49,10 +49,10 @@ async def add_tasks_to_notion(
 
 
 async def _get_db_properties(db_id: str, headers: dict) -> dict:
-    """Возвращает словарь {prop_name: prop_type} из схемы БД."""
+    # Возвращает словарь {prop_name: prop_type} из схемы источника данных Notion 2025.
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"https://api.notion.com/v1/databases/{db_id}",
+            f"https://api.notion.com/v1/data_sources/{db_id}",
             headers=headers,
         ) as resp:
             if resp.status != 200:
@@ -125,7 +125,10 @@ def _build_page_body(
         }
 
     return {
-        "parent": {"database_id": db_id},
+        "parent": {
+            "type": "data_source_id",
+            "data_source_id": db_id
+        },
         "properties": properties,
     }
 
@@ -134,13 +137,11 @@ GROUP_INDEX = {"to_do": 0, "in_progress": 1, "complete": 2}
 
 
 async def _get_status_property(db_id: str, headers: dict) -> dict | None:
-    """
-    Возвращает {"name": <имя свойства>, "options": [...], "groups": [...]}
-    для первого свойства типа status в базе, или None, если такого нет.
-    """
+    # Возвращает {"name": <имя свойства>, "options": [...], "groups": [...]}
+    # для первого свойства типа status в источнике данных, или None, если такого нет.
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"https://api.notion.com/v1/databases/{db_id}",
+            f"https://api.notion.com/v1/data_sources/{db_id}",
             headers=headers,
         ) as resp:
             if resp.status != 200:
@@ -176,7 +177,7 @@ async def get_notion_status_options(notion_token: str, notion_db_id: str) -> lis
     """
     headers = {
         "Authorization": f"Bearer {notion_token}",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": "2025-09-03",
     }
     status_schema = await _get_status_property(notion_db_id, headers)
     if not status_schema or "options" not in status_schema:
@@ -197,7 +198,7 @@ async def update_task_status_in_notion(
     """
     headers = {
         "Authorization": f"Bearer {notion_token}",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": "2025-09-03",
         "Content-Type": "application/json",
     }
 
@@ -254,12 +255,10 @@ async def sync_task_status(user, task, target_group: str):
 
 
 async def get_notion_workspace_users(notion_token: str) -> list[dict]:
-    """
-    Получает список всех участников (пользователей типа person) воркспейса Notion.
-    """
+    # Получает список всех участников (пользователей типа person) воркспейса Notion.
     headers = {
         "Authorization": f"Bearer {notion_token}",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": "2025-09-03",
     }
     async with aiohttp.ClientSession() as session:
         try:
@@ -275,10 +274,12 @@ async def get_notion_workspace_users(notion_token: str) -> list[dict]:
                 # Фильтруем участников, берем только людей (person)
                 for u in data.get("results", []):
                     if u.get("type") == "person":
-                        name = u.get("name") or u.get("person", {}).get("email") or "Unknown"
+                        name = u.get("name") or "Unknown"
+                        email = u.get("person", {}).get("email")
                         users.append({
                             "id": u.get("id"),
-                            "name": name
+                            "name": name,
+                            "email": email
                         })
                 # Если людей не нашли, возвращаем всех
                 if not users:
@@ -286,9 +287,61 @@ async def get_notion_workspace_users(notion_token: str) -> list[dict]:
                         name = u.get("name") or "Unknown"
                         users.append({
                             "id": u.get("id"),
-                            "name": name
+                            "name": name,
+                            "email": None
                         })
                 return users
         except Exception as e:
             logging.error(f"Error calling Notion API in get_notion_workspace_users: {e}")
             return []
+
+
+async def discover_notion_data_sources(token: str, target_id: str) -> tuple[str | None, list[dict] | None, str | None]:
+    # Проверяет переданный ID: является ли он контейнером базы данных или конкретным источником данных.
+    # Возвращает кортеж (type_found, data_sources_list, error_message).
+    # type_found может быть 'database', 'data_source' или None в случае ошибки.
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": "2025-09-03"
+    }
+
+    # 1. Пробуем запросить как базу данных (контейнер)
+    db_url = f"https://api.notion.com/v1/databases/{target_id}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(db_url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    data_sources = data.get("data_sources", [])
+                    return "database", data_sources, None
+                elif resp.status != 404 and resp.status != 400:
+                    try:
+                        err_data = await resp.json()
+                        err_msg = err_data.get("message", f"HTTP {resp.status}")
+                    except Exception:
+                        err_msg = f"HTTP {resp.status}"
+                    return None, None, err_msg
+    except Exception as e:
+        logging.error(f"Notion: ошибка при запросе БД как контейнера: {e}")
+        return None, None, str(e)
+
+    # 2. Если получили 404/400, значит это может быть конкретный источник данных (Data Source)
+    ds_url = f"https://api.notion.com/v1/data_sources/{target_id}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(ds_url, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    title_rich = data.get("title", [])
+                    name = "".join(t.get("plain_text", "") for t in title_rich) or "Tasks"
+                    return "data_source", [{"id": data["id"], "name": name}], None
+                else:
+                    try:
+                        err_data = await resp.json()
+                        err_msg = err_data.get("message", f"HTTP {resp.status}")
+                    except Exception:
+                        err_msg = f"HTTP {resp.status}"
+                    return None, None, err_msg
+    except Exception as e:
+        logging.error(f"Notion: ошибка при запросе источника данных: {e}")
+        return None, None, str(e)

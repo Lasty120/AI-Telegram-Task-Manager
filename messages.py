@@ -603,18 +603,26 @@ class NotionMessages:
         token: str | None, 
         db_id: str | None, 
         notified_status: str | None = None, 
-        completed_status: str | None = None
+        completed_status: str | None = None,
+        db_name: str | None = None
     ) -> str:
         lang = user_lang.get()
         token_str = token[:4] + "..." + token[-4:] if token else "—"
         db_id_str = db_id if db_id else "—"
+        
+        # Если имя источника данных переданно, показываем его вместе с ID
+        if db_name:
+            db_display = f"{db_name} (<code>{db_id_str}</code>)"
+        else:
+            db_display = f"<code>{db_id_str}</code>"
+
         notified_str = notified_status if notified_status else "—"
         completed_str = completed_status if completed_status else "—"
         translations = {
             "ru": (
                 "<b>Регистрация Notion успешно завершена!</b>\n\n"
                 f"• Ключ интеграции: <code>{token_str}</code>\n"
-                f"• ID базы данных: <code>{db_id_str}</code>\n"
+                f"• Источник данных: {db_display}\n"
                 f"• Статус при уведомлении: <code>{notified_str}</code>\n"
                 f"• Статус при выполнении: <code>{completed_str}</code>\n\n"
                 "Все настройки сохранены. Теперь ваши задачи будут синхронизироваться с Notion."
@@ -622,7 +630,7 @@ class NotionMessages:
             "en": (
                 "<b>Notion registration completed successfully!</b>\n\n"
                 f"• Integration Key: <code>{token_str}</code>\n"
-                f"• Database ID: <code>{db_id_str}</code>\n"
+                f"• Data Source: {db_display}\n"
                 f"• Notification status: <code>{notified_str}</code>\n"
                 f"• Completion status: <code>{completed_str}</code>\n\n"
                 "All settings saved. Now your tasks will synchronize with Notion."
@@ -701,8 +709,32 @@ class NotionMessages:
     def ask_notion_user(cls) -> str:
         lang = user_lang.get()
         translations = {
-            "ru": "<b>Выберите свой аккаунт в списке участников Notion:</b>",
-            "en": "<b>Select your account from the Notion participants list:</b>"
+            "ru": (
+                "<b>Выберите свой аккаунт в списке участников Notion:</b>\n\n"
+                "Вы также можете отправить свою почту или имя сообщением, чтобы быстро найти себя."
+            ),
+            "en": (
+                "<b>Select your account from the Notion participants list:</b>\n\n"
+                "You can also send your email or name as a message to quickly find yourself."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_users_found(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Найденные участники:</b>",
+            "en": "<b>Found participants:</b>"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_user_not_found_retry(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Участник с такой почтой или именем не найден.</b>\n\nПожалуйста, введите другую почту/имя или выберите из списка ниже:",
+            "en": "<b>Participant with this email or name not found.</b>\n\nPlease enter another email/name or select from the list below:"
         }
         return translations.get(lang, translations["ru"])
 
@@ -778,5 +810,32 @@ class NotionMessages:
         translations = {
             "ru": f"❌ Запрос отклонен для {user_str} (Ноушн: {notion_user_name})",
             "en": f"❌ Request rejected for {user_str} (Notion: {notion_user_name})"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def ask_data_source(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Мы нашли несколько источников данных (Data Sources) в вашей базе данных.</b>\n\nПожалуйста, выберите тот, который хотите использовать для синхронизации задач:",
+            "en": "<b>We found multiple data sources in your database.</b>\n\nPlease select the one you want to use for task synchronization:"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def no_data_sources_found(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "<b>Источники данных не найдены!</b>\n\nВ указанной базе данных не найдено ни одного источника данных. Пожалуйста, убедитесь, что база данных содержит таблицы/источники.",
+            "en": "<b>No data sources found!</b>\n\nNo data sources were found in the specified database. Please make sure the database contains tables/sources."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def data_source_selected(cls, name: str) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": f"Выбран источник данных: <b>{name}</b>",
+            "en": f"Selected data source: <b>{name}</b>"
         }
         return translations.get(lang, translations["ru"])
