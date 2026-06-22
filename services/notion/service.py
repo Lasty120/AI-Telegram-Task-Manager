@@ -255,7 +255,9 @@ async def sync_task_status(user, task, target_group: str):
 
 
 async def get_notion_workspace_users(notion_token: str) -> list[dict]:
-    # Получает список всех участников (пользователей типа person) воркспейса Notion.
+    """
+    Получает список всех участников (пользователей типа person) воркспейса Notion.
+    """
     headers = {
         "Authorization": f"Bearer {notion_token}",
         "Notion-Version": "2025-09-03",
@@ -297,9 +299,11 @@ async def get_notion_workspace_users(notion_token: str) -> list[dict]:
 
 
 async def discover_notion_data_sources(token: str, target_id: str) -> tuple[str | None, list[dict] | None, str | None]:
-    # Проверяет переданный ID: является ли он контейнером базы данных или конкретным источником данных.
-    # Возвращает кортеж (type_found, data_sources_list, error_message).
-    # type_found может быть 'database', 'data_source' или None в случае ошибки.
+    """
+    Проверяет переданный ID: является ли он контейнером базы данных или конкретным источником данных.
+    Возвращает кортеж (type_found, data_sources_list, error_message).
+    type_found может быть 'database', 'data_source' или None в случае ошибки.
+    """
     headers = {
         "Authorization": f"Bearer {token}",
         "Notion-Version": "2025-09-03"
