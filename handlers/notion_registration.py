@@ -1,5 +1,4 @@
 import re
-import aiohttp
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -8,14 +7,21 @@ from aiogram.types import Message, CallbackQuery
 from aiosqlite import Connection
 import logging
 
-from database.crud.user import update_user_notion, update_user_pending_notion
-from keyboards.reply_keyboards import get_registration_kb, get_main_kb
+from database.crud.user import (
+    update_user_notion, 
+    update_user_pending_notion,
+    clear_notion_workspace_users,
+    save_notion_workspace_users,
+    get_cached_notion_users
+)
+from keyboards.reply_keyboards import get_registration_kb, get_main_kb, get_cancel_kb
 from keyboards.inline_keyboards import (
     get_status_selection_keyboard, 
     get_notion_users_keyboard, 
     get_admin_approval_keyboard,
     get_notion_data_sources_keyboard
 )
+from services.notion import NotionClient
 from services.notion.service import (
     get_notion_status_options, 
     get_notion_workspace_users,
@@ -56,23 +62,18 @@ async def validate_notion(token: str | None, db_id: str | None) -> tuple[bool, s
             return True, None
         return False, err_msg
     else:
-        url = "https://api.notion.com/v1/users/me"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Notion-Version": "2025-09-03"
-        }
+        client = NotionClient(token)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        return True, None
-                    else:
-                        try:
-                            err_data = await response.json()
-                            err_msg = err_data.get("message", f"HTTP {response.status}")
-                        except Exception:
-                            err_msg = f"HTTP {response.status}"
-                        return False, err_msg
+            response = await client.get("/v1/users/me")
+            if response.status == 200:
+                return True, None
+            else:
+                try:
+                    err_data = await response.json()
+                    err_msg = err_data.get("message", f"HTTP {response.status}")
+                except Exception:
+                    err_msg = f"HTTP {response.status}"
+                return False, err_msg
         except Exception as e:
             return False, str(e)
 
@@ -83,6 +84,7 @@ async def initiate_user_selection(
     state: FSMContext,
     token: str,
     db_id: str | None,
+    db: Connection,
     notified_status: str | None = None,
     completed_status: str | None = None
 ):
@@ -94,13 +96,15 @@ async def initiate_user_selection(
             text=NotionMessages.notion_users_loading(),
             parse_mode="HTML"
         )
+        tg_id = message_or_callback.from_user.id
     else:
         msg = await message_or_callback.answer(
             text=NotionMessages.notion_users_loading(),
             parse_mode="HTML"
         )
+        tg_id = message_or_callback.from_user.id
 
-    # Получаем список участников из Notion
+    # Получаем список участников из Notion с пагинацией
     notion_users = await get_notion_workspace_users(token)
 
     try:
@@ -124,25 +128,30 @@ async def initiate_user_selection(
         await state.clear()
         return
 
+    # Сохраняем участников Notion в кэш БД для этого Telegram-пользователя
+    await clear_notion_workspace_users(db, tg_id)
+    await save_notion_workspace_users(db, tg_id, notion_users)
+
+    # Инициализируем пустой список для результатов поиска в FSM state
     await state.update_data(
         token=token,
         db_id=db_id,
         notion_status_notified=notified_status,
         notion_status_completed=completed_status,
-        notion_users=notion_users
+        notion_users=[]
     )
     await state.set_state(NotionRegistrationStates.waiting_for_user_selection)
 
-    kb = get_notion_users_keyboard(notion_users)
+    kb = get_cancel_kb()
     if isinstance(message_or_callback, CallbackQuery):
         await message_or_callback.message.answer(
-            text=NotionMessages.ask_notion_user(),
+            text=NotionMessages.notion_users_loaded_search_prompt(),
             reply_markup=kb,
             parse_mode="HTML"
         )
     else:
         await message_or_callback.answer(
-            text=NotionMessages.ask_notion_user(),
+            text=NotionMessages.notion_users_loaded_search_prompt(),
             reply_markup=kb,
             parse_mode="HTML"
         )
@@ -254,7 +263,7 @@ async def proceed_to_status_selection(
     else:
         # Переходим к выбору пользователя (если токен был предоставлен), иначе просто завершаем
         if token:
-            await initiate_user_selection(message_or_callback, state, token, db_id)
+            await initiate_user_selection(message_or_callback, state, token, db_id, db=db)
         else:
             await update_user_notion(
                 db=db,
@@ -369,7 +378,7 @@ async def process_db_id(message: Message, state: FSMContext, db: Connection):
     else:
         # Если пропустили базу данных
         if token:
-            await initiate_user_selection(message, state, token, db_id)
+            await initiate_user_selection(message, state, token, db_id, db=db)
         else:
             await update_user_notion(
                 db=db,
@@ -524,6 +533,7 @@ async def process_completed_status_callback(callback: CallbackQuery, state: FSMC
         state=state,
         token=token,
         db_id=db_id,
+        db=db,
         notified_status=notified_status,
         completed_status=status_name
     )
@@ -548,6 +558,7 @@ async def process_completed_status_text(message: Message, state: FSMContext, db:
             state=state,
             token=token,
             db_id=db_id,
+            db=db,
             notified_status=notified_status,
             completed_status=matched
         )
@@ -623,32 +634,33 @@ async def process_notion_user_callback(callback: CallbackQuery, state: FSMContex
             logging.error(f"Failed to notify admin {admin_id}: {e}")
 
 
-# Обработка текстового ввода для фильтрации участников по почте или имени (поддерживает частичное совпадение/substring)
+# Обработка текстового ввода для поиска участников по почте или имени (поддерживает частичное совпадение)
 @router.message(NotionRegistrationStates.waiting_for_user_selection)
-async def process_notion_user_text(message: Message, state: FSMContext):
+async def process_notion_user_text(message: Message, state: FSMContext, db: Connection):
     query = message.text.strip().lower() if message.text else ""
-    data = await state.get_data()
-    users = data.get("notion_users", [])
+    tg_id = message.from_user.id
 
     if not query:
         await message.answer(
-            text=NotionMessages.ask_notion_user(),
-            reply_markup=get_notion_users_keyboard(users),
+            text=NotionMessages.notion_users_loaded_search_prompt(),
             parse_mode="HTML"
         )
         return
 
+    # Загружаем участников из базы данных
+    cached_users = await get_cached_notion_users(db, tg_id)
+
     filtered_users = []
-    for idx, u in enumerate(users):
-        name = u.get("name") or ""
-        email = u.get("email") or ""
+    for u in cached_users:
+        name = (u.get("name") or "").lower()
+        email = (u.get("email") or "").lower()
         # Поиск подстроки (частичное совпадение) в имени или почте
-        if query in name.lower() or query in email.lower():
-            u_copy = u.copy()
-            u_copy["original_index"] = idx
-            filtered_users.append(u_copy)
+        if query in name or query in email:
+            filtered_users.append(u)
 
     if filtered_users:
+        # Сохраняем найденных пользователей в FSM state, чтобы callback_query мог их извлечь по индексу
+        await state.update_data(notion_users=filtered_users)
         kb = get_notion_users_keyboard(filtered_users)
         await message.answer(
             text=NotionMessages.notion_users_found(),
@@ -656,10 +668,8 @@ async def process_notion_user_text(message: Message, state: FSMContext):
             parse_mode="HTML"
         )
     else:
-        # Если совпадений нет, выводим сообщение об ошибке и клавиатуру со всеми пользователями
-        kb = get_notion_users_keyboard(users)
+        # Если совпадений нет, выводим сообщение об ошибке
         await message.answer(
             text=NotionMessages.notion_user_not_found_retry(),
-            reply_markup=kb,
             parse_mode="HTML"
         )

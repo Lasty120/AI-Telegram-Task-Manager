@@ -733,8 +733,23 @@ class NotionMessages:
     def notion_user_not_found_retry(cls) -> str:
         lang = user_lang.get()
         translations = {
-            "ru": "<b>Участник с такой почтой или именем не найден.</b>\n\nПожалуйста, введите другую почту/имя или выберите из списка ниже:",
-            "en": "<b>Participant with this email or name not found.</b>\n\nPlease enter another email/name or select from the list below:"
+            "ru": "<b>Участник с такой почтой или именем не найден.</b>\n\nПожалуйста, попробуйте ввести другое имя или email для поиска:",
+            "en": "<b>Participant with this email or name not found.</b>\n\nPlease try entering another name or email for search:"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def notion_users_loaded_search_prompt(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Список участников загружен!</b>\n\n"
+                "Пожалуйста, введите имя или email участника Notion (или его часть) для поиска:"
+            ),
+            "en": (
+                "<b>Participants list loaded!</b>\n\n"
+                "Please enter the Notion participant's name or email (or part of it) to search:"
+            )
         }
         return translations.get(lang, translations["ru"])
 

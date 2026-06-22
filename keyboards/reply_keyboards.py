@@ -57,3 +57,21 @@ def get_registration_kb():
     builder.button(text=t["cancel"])
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
+
+
+def get_cancel_kb():
+    builder = ReplyKeyboardBuilder()
+    lang = user_lang.get()
+
+    translations = {
+        "ru": {
+            "cancel": "Отмена"
+        },
+        "en": {
+            "cancel": "Cancel"
+        }
+    }
+    t = translations.get(lang, translations["ru"])
+
+    builder.button(text=t["cancel"])
+    return builder.as_markup(resize_keyboard=True)

@@ -124,3 +124,56 @@ async def reject_user_pending_notion(db: aiosqlite.Connection, tg_id: int):
 async def get_all_users(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
     async with db.execute("SELECT * FROM users") as cursor:
         return await cursor.fetchall()
+
+
+async def clear_notion_workspace_users(db: aiosqlite.Connection, tg_id: int):
+    """
+    Удаляет кэш пользователей Notion для указанного Telegram-пользователя.
+    """
+    safe_tg_id = int(tg_id)
+    await db.execute(
+        "DELETE FROM notion_workspace_users WHERE tg_id = ?",
+        (safe_tg_id,)
+    )
+    await db.commit()
+
+
+async def save_notion_workspace_users(db: aiosqlite.Connection, tg_id: int, users: list[dict]):
+    """
+    Сохраняет пользователей Notion в кэш БД для указанного Telegram-пользователя.
+    """
+    safe_tg_id = int(tg_id)
+    # Формируем список кортежей для пакетной вставки
+    data = [
+        (safe_tg_id, u["id"], u.get("name"), u.get("email"))
+        for u in users
+    ]
+    if data:
+        await db.executemany(
+            """
+            INSERT OR REPLACE INTO notion_workspace_users (tg_id, notion_user_id, name, email)
+            VALUES (?, ?, ?, ?)
+            """,
+            data
+        )
+        await db.commit()
+
+
+async def get_cached_notion_users(db: aiosqlite.Connection, tg_id: int) -> list[dict]:
+    """
+    Получает закэшированных пользователей Notion для указанного Telegram-пользователя.
+    """
+    safe_tg_id = int(tg_id)
+    async with db.execute(
+        "SELECT notion_user_id, name, email FROM notion_workspace_users WHERE tg_id = ?",
+        (safe_tg_id,)
+    ) as cursor:
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": row["notion_user_id"],
+                "name": row["name"],
+                "email": row["email"]
+            }
+            for row in rows
+        ]

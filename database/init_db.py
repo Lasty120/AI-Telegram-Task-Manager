@@ -38,6 +38,17 @@ async def init_db(db_path: str):
             query TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
+
+        -- Таблица для кэширования участников Notion
+        CREATE TABLE IF NOT EXISTS notion_workspace_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tg_id INTEGER NOT NULL,
+            notion_user_id TEXT NOT NULL,
+            name TEXT,
+            email TEXT,
+            FOREIGN KEY (tg_id) REFERENCES users (tg_id) ON DELETE CASCADE,
+            UNIQUE(tg_id, notion_user_id)
+        );
         """)
         
         # Безопасная автомиграция: добавляем колонки, если их еще нет
