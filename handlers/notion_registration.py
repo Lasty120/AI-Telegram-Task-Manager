@@ -463,11 +463,6 @@ async def process_notion_user_callback(callback: CallbackQuery, state: FSMContex
             username=callback.from_user.username,
             notion_user_name=selected_user["name"]
         )
-        for admin_id in ADMIN_IDS:
-            try:
-                await bot.send_message(chat_id=admin_id, text=admin_text, reply_markup=admin_markup, parse_mode="HTML")
-            except Exception as e:
-                logging.error(f"Failed to notify admin {admin_id}: {e}")
 
 
 # Шаг 4: Выбор статуса при создании задачи (кнопка)

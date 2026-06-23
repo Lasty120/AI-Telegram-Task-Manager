@@ -58,43 +58,11 @@ async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: B
         parse_mode="HTML"
     )
 
-    user_state_key = StorageKey(
-        bot_id=bot.id,
+    await bot.send_message(
         chat_id=target_tg_id,
-        user_id=target_tg_id
+        text=NotionMessages.notion_admin_approved(username=username, notion_user_name=pending_name),
+        parse_mode="HTML"
     )
-    # Получаем FSMContext именно для этого юзера
-    user_state = FSMContext(storage=state.storage, key=user_state_key)
-
-    # Достаем статусы из БД (в user_row у тебя уже есть notion_statuses)
-    status_options = []
-    if user_row and user_row["notion_statuses"]:
-        status_options = json.loads(user_row["notion_statuses"])
-
-    if status_options:
-        # Закидываем юзера в стейт выбора статуса
-        await user_state.set_state(NotionRegistrationStates.waiting_for_created_status)
-        # Сохраняем опции в его стейт дату, чтобы следующий хендлер их увидел
-        await user_state.update_data(
-            status_options=status_options,
-            token=user_row["notion_token"],
-            db_id=user_row["notion_db_id"]
-        )
-
-        # Отправляем юзеру сообщение с клавиатурой
-        await bot.send_message(
-            chat_id=target_tg_id,
-            text=NotionMessages.ask_created_status(),
-            parse_mode="HTML",
-            reply_markup=get_status_selection_keyboard(status_options)
-        )
-    else:
-        # Если статусов в БД нет (например, БД без статусов), просто пишем, что всё ок
-        await bot.send_message(
-            chat_id=target_tg_id,
-            text=NotionMessages.notion_admin_approved(username=username, notion_user_name=pending_name),
-            parse_mode="HTML"
-        )
 
 
 # Обработка нажатия кнопки "Отклонить" администратором
