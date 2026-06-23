@@ -18,7 +18,7 @@ async def process_task_command(text: str, message, user, db):
     waiting_msg = await message.answer(AiMessages.thinking())
 
     user_tasks = await get_user_tasks(db, user["id"])
-    parsed_command = await parse_user_text(text, user_tasks)
+    parsed_command = await parse_user_text(text, user_tasks, user)
 
 
     if isinstance(parsed_command, str):

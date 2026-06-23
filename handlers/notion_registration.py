@@ -2,7 +2,6 @@ import re
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message, CallbackQuery
 from aiosqlite import Connection
 import logging
@@ -23,22 +22,14 @@ from keyboards.inline_keyboards import (
 )
 from services.notion import NotionClient
 from services.notion.service import (
-    get_notion_status_options, 
     get_notion_workspace_users,
     discover_notion_data_sources
 )
 from messages import NotionMessages
 from config import ADMIN_IDS
+from handlers.states import NotionRegistrationStates
 
 router = Router()
-
-class NotionRegistrationStates(StatesGroup):
-    waiting_for_token = State()
-    waiting_for_db_id = State()
-    waiting_for_data_source = State()
-    waiting_for_notified_status = State()
-    waiting_for_completed_status = State()
-    waiting_for_user_selection = State()
 
 
 def extract_db_id(text: str) -> str | None:
@@ -85,8 +76,7 @@ async def initiate_user_selection(
     token: str,
     db_id: str | None,
     db: Connection,
-    notified_status: str | None = None,
-    completed_status: str | None = None
+    db_name: str | None = None
 ):
     """
     Получает пользователей из Notion и переводит FSM в режим выбора пользователя.
@@ -136,8 +126,7 @@ async def initiate_user_selection(
     await state.update_data(
         token=token,
         db_id=db_id,
-        notion_status_notified=notified_status,
-        notion_status_completed=completed_status,
+        db_name=db_name,
         notion_users=[]
     )
     await state.set_state(NotionRegistrationStates.waiting_for_user_selection)
@@ -162,7 +151,7 @@ async def initiate_user_selection(
     NotionRegistrationStates.waiting_for_token, 
     NotionRegistrationStates.waiting_for_db_id, 
     NotionRegistrationStates.waiting_for_data_source,
-    NotionRegistrationStates.waiting_for_notified_status, 
+    NotionRegistrationStates.waiting_for_created_status, 
     NotionRegistrationStates.waiting_for_completed_status, 
     NotionRegistrationStates.waiting_for_user_selection
 ), F.text.in_({"Отмена", "Cancel", "/cancel"}))
@@ -222,64 +211,7 @@ async def process_token(message: Message, state: FSMContext):
     )
 
 
-async def proceed_to_status_selection(
-    message_or_callback,
-    state: FSMContext,
-    token: str,
-    db_id: str,
-    db: Connection,
-    db_name: str | None = None
-):
-    # Проверяет наличие статусов для выбранного источника данных и переходит к выбору статусов.
-    status_options = []
-    if token and db_id:
-        try:
-            status_options = await get_notion_status_options(token, db_id)
-        except Exception as e:
-            logging.error(f"Error fetching status options: {e}")
-
-    await state.update_data(db_name=db_name)
-
-    if isinstance(message_or_callback, CallbackQuery):
-        msg_obj = message_or_callback.message
-        user_id = message_or_callback.from_user.id
-    else:
-        msg_obj = message_or_callback
-        user_id = message_or_callback.from_user.id
-
-    if status_options:
-        # Сохраняем временные данные и переходим к выбору статуса для уведомлений
-        await state.update_data(
-            token=token,
-            db_id=db_id,
-            status_options=status_options
-        )
-        await state.set_state(NotionRegistrationStates.waiting_for_notified_status)
-        await msg_obj.answer(
-            text=NotionMessages.ask_notified_status(),
-            reply_markup=get_status_selection_keyboard(status_options),
-            parse_mode="HTML"
-        )
-    else:
-        # Переходим к выбору пользователя (если токен был предоставлен), иначе просто завершаем
-        if token:
-            await initiate_user_selection(message_or_callback, state, token, db_id, db=db)
-        else:
-            await update_user_notion(
-                db=db,
-                tg_id=user_id,
-                notion_token=token,
-                notion_db_id=db_id
-            )
-            await state.clear()
-            await msg_obj.answer(
-                text=NotionMessages.registration_success(token, db_id, db_name=db_name),
-                reply_markup=get_main_kb(),
-                parse_mode="HTML"
-            )
-
-
-# Шаг 2: Получение ID базы данных и завершение
+# Шаг 2: Получение ID базы данных и переход к выбору участника Notion
 @router.message(NotionRegistrationStates.waiting_for_db_id)
 async def process_db_id(message: Message, state: FSMContext, db: Connection):
     text = message.text.strip() if message.text else ""
@@ -353,9 +285,9 @@ async def process_db_id(message: Message, state: FSMContext, db: Connection):
             await state.clear()
             return
         elif len(data_sources) == 1:
-            # Если ровно 1 источник данных, выбираем его автоматически
+            # Если ровно 1 источник данных, выбираем его автоматически и переходим к выбору пользователя
             selected_ds = data_sources[0]
-            await proceed_to_status_selection(
+            await initiate_user_selection(
                 message_or_callback=message,
                 state=state,
                 token=token,
@@ -421,7 +353,7 @@ async def process_data_source_callback(callback: CallbackQuery, state: FSMContex
         parse_mode="HTML"
     )
 
-    await proceed_to_status_selection(
+    await initiate_user_selection(
         message_or_callback=callback,
         state=state,
         token=token,
@@ -445,7 +377,7 @@ async def process_data_source_text(message: Message, state: FSMContext, db: Conn
             text=NotionMessages.data_source_selected(matched["name"]),
             parse_mode="HTML"
         )
-        await proceed_to_status_selection(
+        await initiate_user_selection(
             message_or_callback=message,
             state=state,
             token=token,
@@ -457,115 +389,6 @@ async def process_data_source_text(message: Message, state: FSMContext, db: Conn
         await message.answer(
             text=NotionMessages.ask_data_source(),
             reply_markup=get_notion_data_sources_keyboard(data_sources),
-            parse_mode="HTML"
-        )
-
-
-# Обработка выбора статуса при уведомлении (кнопка)
-@router.callback_query(NotionRegistrationStates.waiting_for_notified_status, F.data.startswith("select_status:"))
-async def process_notified_status_callback(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    options = data.get("status_options", [])
-    try:
-        idx = int(callback.data.split(":")[1])
-        status_name = options[idx]
-    except (IndexError, ValueError):
-        await callback.answer()
-        return
-
-    await state.update_data(notion_status_notified=status_name)
-    await state.set_state(NotionRegistrationStates.waiting_for_completed_status)
-    await callback.answer()
-    await callback.message.edit_text(
-        text=NotionMessages.ask_completed_status(),
-        reply_markup=get_status_selection_keyboard(options),
-        parse_mode="HTML"
-    )
-
-
-# Обработка выбора статуса при уведомлении (вручную текстом)
-@router.message(NotionRegistrationStates.waiting_for_notified_status)
-async def process_notified_status_text(message: Message, state: FSMContext):
-    text = message.text.strip() if message.text else ""
-    data = await state.get_data()
-    options = data.get("status_options", [])
-
-    matched = next((opt for opt in options if opt.lower() == text.lower()), None)
-    if matched:
-        await state.update_data(notion_status_notified=matched)
-        await state.set_state(NotionRegistrationStates.waiting_for_completed_status)
-        await message.answer(
-            text=NotionMessages.ask_completed_status(),
-            reply_markup=get_status_selection_keyboard(options),
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer(
-            text=NotionMessages.invalid_status_selection(),
-            reply_markup=get_status_selection_keyboard(options),
-            parse_mode="HTML"
-        )
-
-
-# Обработка выбора статуса при выполнении (кнопка)
-@router.callback_query(NotionRegistrationStates.waiting_for_completed_status, F.data.startswith("select_status:"))
-async def process_completed_status_callback(callback: CallbackQuery, state: FSMContext, db: Connection):
-    data = await state.get_data()
-    options = data.get("status_options", [])
-    try:
-        idx = int(callback.data.split(":")[1])
-        status_name = options[idx]
-    except (IndexError, ValueError):
-        await callback.answer()
-        return
-
-    token = data.get("token")
-    db_id = data.get("db_id")
-    notified_status = data.get("notion_status_notified")
-
-    # Вместо сохранения и завершения, переходим к выбору пользователя
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await initiate_user_selection(
-        message_or_callback=callback,
-        state=state,
-        token=token,
-        db_id=db_id,
-        db=db,
-        notified_status=notified_status,
-        completed_status=status_name
-    )
-
-
-# Обработка выбора статуса при выполнении (вручную текстом)
-@router.message(NotionRegistrationStates.waiting_for_completed_status)
-async def process_completed_status_text(message: Message, state: FSMContext, db: Connection):
-    text = message.text.strip() if message.text else ""
-    data = await state.get_data()
-    options = data.get("status_options", [])
-
-    matched = next((opt for opt in options if opt.lower() == text.lower()), None)
-    if matched:
-        token = data.get("token")
-        db_id = data.get("db_id")
-        notified_status = data.get("notion_status_notified")
-
-        # Вместо сохранения и завершения, переходим к выбору пользователя
-        await initiate_user_selection(
-            message_or_callback=message,
-            state=state,
-            token=token,
-            db_id=db_id,
-            db=db,
-            notified_status=notified_status,
-            completed_status=matched
-        )
-    else:
-        await message.answer(
-            text=NotionMessages.invalid_status_selection(),
-            reply_markup=get_status_selection_keyboard(options),
             parse_mode="HTML"
         )
 
@@ -584,44 +407,169 @@ async def process_notion_user_callback(callback: CallbackQuery, state: FSMContex
 
     token = data.get("token")
     db_id = data.get("db_id")
-    notified_status = data.get("notion_status_notified")
-    completed_status = data.get("notion_status_completed")
 
-    # Сначала сохраняем все настройки Notion в БД (при этом старые одобренные UUID сбрасываются)
+    # Считываем доступные свойства БД из Notion для кэширования в БД
+    from services.notion.service import get_notion_properties_options
+    import json
+    
+    props = await get_notion_properties_options(token, db_id)
+    status_options = props.get("statuses") or []
+    multi_select_options = props.get("multi_selects") or []
+
+    await state.update_data(
+        selected_user_id=selected_user["id"],
+        selected_user_name=selected_user["name"],
+        status_options=status_options,
+        multi_select_options=multi_select_options
+    )
+
+    await callback.answer()
+
+    if status_options:
+        # Переходим к выбору статуса при создании задачи
+        await state.set_state(NotionRegistrationStates.waiting_for_created_status)
+        await callback.message.edit_text(
+            text=NotionMessages.ask_created_status(),
+            reply_markup=get_status_selection_keyboard(status_options),
+            parse_mode="HTML"
+        )
+    else:
+        # Сохраняем без статусов, отправляем на одобрение
+        await update_user_notion(
+            db=db,
+            tg_id=callback.from_user.id,
+            notion_token=token,
+            notion_db_id=db_id,
+            notion_status_created=None,
+            notion_status_completed=None,
+            notion_statuses=json.dumps([]),
+            notion_multi_selects=json.dumps(multi_select_options, ensure_ascii=False)
+        )
+        await update_user_pending_notion(
+            db=db,
+            tg_id=callback.from_user.id,
+            pending_id=selected_user["id"],
+            pending_name=selected_user["name"]
+        )
+        await state.clear()
+        await callback.message.edit_text(
+            text=NotionMessages.notion_user_approval_pending(),
+            parse_mode="HTML"
+        )
+
+        # Уведомляем администраторов
+        admin_markup = get_admin_approval_keyboard(callback.from_user.id)
+        admin_text = NotionMessages.notion_admin_approval_request(
+            username=callback.from_user.username,
+            notion_user_name=selected_user["name"]
+        )
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(chat_id=admin_id, text=admin_text, reply_markup=admin_markup, parse_mode="HTML")
+            except Exception as e:
+                logging.error(f"Failed to notify admin {admin_id}: {e}")
+
+
+# Шаг 4: Выбор статуса при создании задачи (кнопка)
+@router.callback_query(NotionRegistrationStates.waiting_for_created_status, F.data.startswith("select_status:"))
+async def process_created_status_callback(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    options = data.get("status_options", [])
+    try:
+        idx = int(callback.data.split(":")[1])
+        status_name = options[idx]
+    except (IndexError, ValueError):
+        await callback.answer()
+        return
+
+    await state.update_data(notion_status_created=status_name)
+    await state.set_state(NotionRegistrationStates.waiting_for_completed_status)
+    await callback.answer()
+    await callback.message.edit_text(
+        text=NotionMessages.ask_completed_status(),
+        reply_markup=get_status_selection_keyboard(options),
+        parse_mode="HTML"
+    )
+
+
+# Шаг 4: Выбор статуса при создании задачи (вручную текстом)
+@router.message(NotionRegistrationStates.waiting_for_created_status)
+async def process_created_status_text(message: Message, state: FSMContext):
+    text = message.text.strip() if message.text else ""
+    data = await state.get_data()
+    options = data.get("status_options", [])
+
+    matched = next((opt for opt in options if opt.lower() == text.lower()), None)
+    if matched:
+        await state.update_data(notion_status_created=matched)
+        await state.set_state(NotionRegistrationStates.waiting_for_completed_status)
+        await message.answer(
+            text=NotionMessages.ask_completed_status(),
+            reply_markup=get_status_selection_keyboard(options),
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            text=NotionMessages.invalid_status_selection(),
+            reply_markup=get_status_selection_keyboard(options),
+            parse_mode="HTML"
+        )
+
+
+# Шаг 5: Выбор статуса при выполнении задачи (кнопка)
+@router.callback_query(NotionRegistrationStates.waiting_for_completed_status, F.data.startswith("select_status:"))
+async def process_completed_status_callback(callback: CallbackQuery, state: FSMContext, db: Connection, bot: Bot):
+    data = await state.get_data()
+    options = data.get("status_options", [])
+    try:
+        idx = int(callback.data.split(":")[1])
+        status_name = options[idx]
+    except (IndexError, ValueError):
+        await callback.answer()
+        return
+
+    token = data.get("token")
+    db_id = data.get("db_id")
+    created_status = data.get("notion_status_created")
+    selected_user_id = data.get("selected_user_id")
+    selected_user_name = data.get("selected_user_name")
+    multi_select_options = data.get("multi_select_options", [])
+
+    import json
+    # Сохраняем все настройки Notion в БД
     await update_user_notion(
         db=db,
         tg_id=callback.from_user.id,
         notion_token=token,
         notion_db_id=db_id,
-        notion_status_notified=notified_status,
-        notion_status_completed=completed_status
+        notion_status_created=created_status,
+        notion_status_completed=status_name,
+        notion_statuses=json.dumps(options, ensure_ascii=False),
+        notion_multi_selects=json.dumps(multi_select_options, ensure_ascii=False)
     )
 
-    # Затем сохраняем выбранного пользователя как ожидающего одобрения
+    # Сохраняем выбранного пользователя как ожидающего одобрения
     await update_user_pending_notion(
         db=db,
         tg_id=callback.from_user.id,
-        pending_id=selected_user["id"],
-        pending_name=selected_user["name"]
+        pending_id=selected_user_id,
+        pending_name=selected_user_name
     )
 
-    # Очищаем FSM стейт
     await state.clear()
     await callback.answer()
     
-    # Сообщаем пользователю о том, что запрос отправлен на аппрув
     await callback.message.edit_text(
         text=NotionMessages.notion_user_approval_pending(),
         parse_mode="HTML"
     )
 
-    # Уведомляем администраторов бота
+    # Уведомляем администраторов
     admin_markup = get_admin_approval_keyboard(callback.from_user.id)
     admin_text = NotionMessages.notion_admin_approval_request(
         username=callback.from_user.username,
-        notion_user_name=selected_user["name"]
+        notion_user_name=selected_user_name
     )
-    
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(
@@ -632,6 +580,72 @@ async def process_notion_user_callback(callback: CallbackQuery, state: FSMContex
             )
         except Exception as e:
             logging.error(f"Failed to notify admin {admin_id}: {e}")
+
+
+# Шаг 5: Выбор статуса при выполнении задачи (вручную текстом)
+@router.message(NotionRegistrationStates.waiting_for_completed_status)
+async def process_completed_status_text(message: Message, state: FSMContext, db: Connection, bot: Bot):
+    text = message.text.strip() if message.text else ""
+    data = await state.get_data()
+    options = data.get("status_options", [])
+
+    matched = next((opt for opt in options if opt.lower() == text.lower()), None)
+    if matched:
+        token = data.get("token")
+        db_id = data.get("db_id")
+        created_status = data.get("notion_status_created")
+        selected_user_id = data.get("selected_user_id")
+        selected_user_name = data.get("selected_user_name")
+        multi_select_options = data.get("multi_select_options", [])
+
+        import json
+        await update_user_notion(
+            db=db,
+            tg_id=message.from_user.id,
+            notion_token=token,
+            notion_db_id=db_id,
+            notion_status_created=created_status,
+            notion_status_completed=matched,
+            notion_statuses=json.dumps(options, ensure_ascii=False),
+            notion_multi_selects=json.dumps(multi_select_options, ensure_ascii=False)
+        )
+
+        await update_user_pending_notion(
+            db=db,
+            tg_id=message.from_user.id,
+            pending_id=selected_user_id,
+            pending_name=selected_user_name
+        )
+
+        await state.clear()
+        await message.answer(
+            text=NotionMessages.notion_user_approval_pending(),
+            parse_mode="HTML",
+            reply_markup=get_main_kb()
+        )
+
+        # Уведомляем администраторов
+        admin_markup = get_admin_approval_keyboard(message.from_user.id)
+        admin_text = NotionMessages.notion_admin_approval_request(
+            username=message.from_user.username,
+            notion_user_name=selected_user_name
+        )
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_text,
+                    reply_markup=admin_markup,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logging.error(f"Failed to notify admin {admin_id}: {e}")
+    else:
+        await message.answer(
+            text=NotionMessages.invalid_status_selection(),
+            reply_markup=get_status_selection_keyboard(options),
+            parse_mode="HTML"
+        )
 
 
 # Обработка текстового ввода для поиска участников по почте или имени (поддерживает частичное совпадение)

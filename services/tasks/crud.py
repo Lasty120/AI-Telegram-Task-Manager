@@ -81,6 +81,10 @@ class TaskCRUDService:
             except Exception:
                 return ActionResult(text=TaskMessages.invalid_time_format())
 
+        # Разрешаем статус и мультиселект для Notion
+        notion_status = command.status or self.user["notion_status_created"]
+        notion_multi_select = command.multi_select
+
         # 2. Создаем запись о задаче в локальной БД
         new_task_id = await create_task(
             db=self.db,
@@ -90,6 +94,8 @@ class TaskCRUDService:
             details=command.details,
             duration=command.duration,
             importance=command.importance,
+            notion_status=notion_status,
+            notion_multi_select=notion_multi_select,
         )
 
         # 3. Добавляем уведомление о задаче в планировщик
@@ -198,6 +204,7 @@ class TaskCRUDService:
             db=self.db, task_id=task_id,
             content=new_content, details=new_details,
             time_val=new_time_timestamp, duration=new_duration, importance=new_importance,
+            notion_status=command.status, notion_multi_select=command.multi_select,
         )
         
         # Обновляем задачу в планировщике

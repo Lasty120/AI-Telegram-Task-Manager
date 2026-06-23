@@ -13,12 +13,26 @@ from utils.formatters import compute_local_indices
 client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
 
-async def parse_user_text(user_text: str, user_tasks: list = None) -> MultiTaskActionSchema | str:
+async def parse_user_text(user_text: str, user_tasks: list = None, user = None) -> MultiTaskActionSchema | str:
     # ИИ обязан знать текущее время, чтобы правильно рассчитать даты
     tz = TIMEZONE
     current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
-    system_prompt = get_system_prompt(current_time)
+    statuses = []
+    multi_selects = []
+    if user:
+        try:
+            if user["notion_statuses"]:
+                statuses = json.loads(user["notion_statuses"])
+        except Exception:
+            pass
+        try:
+            if user["notion_multi_selects"]:
+                multi_selects = json.loads(user["notion_multi_selects"])
+        except Exception:
+            pass
+
+    system_prompt = get_system_prompt(current_time, statuses, multi_selects)
 
     # Форматируем и передаем список задач
 

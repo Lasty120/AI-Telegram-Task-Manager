@@ -59,14 +59,6 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
             reply_markup=get_task_action_keyboard(task_id)
         )
 
-        if notion_page_id and notion_token and notion_db_id:
-            await update_task_status_in_notion(
-                notion_token=notion_token,
-                notion_db_id=notion_db_id,
-                page_id=notion_page_id,
-                target_group="in_progress",
-                custom_status_name=notion_status_notified,
-            )
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
 

@@ -114,17 +114,21 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None) -> str:
+    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
             "ru": {
                 "header": f"<code>СОЗДАНО</code>\n<b>{escaped_content}</b> {display_time}\n",
                 "until": f"До {display_end_time}",
+                "status": "Статус",
+                "sprint": "Спринт"
             },
             "en": {
                 "header": f"<code>CREATED</code>\n<b>{escaped_content}</b> {display_time}\n",
                 "until": f"Until {display_end_time}",
+                "status": "Status",
+                "sprint": "Sprint"
             },
         }
         t = translations.get(lang, translations["ru"])
@@ -138,6 +142,12 @@ class TaskMessages:
             
         if display_end_time:
             text += t["until"]
+            
+        if notion_status:
+            text += f"\n• {t['status']}: <code>{hd.quote(notion_status)}</code>"
+        if notion_multi_select:
+            text += f"\n• {t['sprint']}: <code>{hd.quote(notion_multi_select)}</code>"
+
         if details:
             escaped_details = hd.quote(details)
             text += f"\n<i>{escaped_details}</i>"
@@ -180,17 +190,21 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_updated(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None) -> str:
+    def task_updated(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
         translations = {
             "ru": {
                 "header": f"<code>ОБНОВЛЕНО</code>\n<b>{escaped_content}</b> {display_time}\n",
                 "until": f"До {display_end_time}",
+                "status": "Статус",
+                "sprint": "Спринт"
             },
             "en": {
                 "header": f"<code>UPDATED</code>\n<b>{escaped_content}</b> {display_time}\n",
                 "until": f"Until {display_end_time}",
+                "status": "Status",
+                "sprint": "Sprint"
             },
         }
         t = translations.get(lang, translations["ru"])
@@ -204,6 +218,12 @@ class TaskMessages:
             
         if display_end_time:
             text += t["until"]
+
+        if notion_status:
+            text += f"\n• {t['status']}: <code>{hd.quote(notion_status)}</code>"
+        if notion_multi_select:
+            text += f"\n• {t['sprint']}: <code>{hd.quote(notion_multi_select)}</code>"
+
         if details:
             escaped_details = hd.quote(details)
             text += f"\n<i>{escaped_details}</i>"
@@ -644,6 +664,15 @@ class NotionMessages:
         translations = {
             "ru": "Выберите статус в Notion, который будет устанавливаться для задачи, когда на неё пришло уведомление:",
             "en": "Select the Notion status to be set for a task when a notification for it arrives:"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def ask_created_status(cls) -> str:
+        lang = user_lang.get()
+        translations = {
+            "ru": "Выберите статус в Notion, который будет устанавливаться для задачи при её создании:",
+            "en": "Select the Notion status to be set for a task when it is created:"
         }
         return translations.get(lang, translations["ru"])
 

@@ -1,4 +1,5 @@
 from aiogram import Router, F, Bot
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiosqlite import Connection
 import logging
@@ -6,13 +7,14 @@ import logging
 from database.crud.user import approve_user_pending_notion, reject_user_pending_notion
 from messages import NotionMessages
 from config import ADMIN_IDS
+from handlers.states import NotionRegistrationStates
 
 router = Router()
 
 
 # Обработка нажатия кнопки "Одобрить" администратором
 @router.callback_query(F.data.startswith("approve_notion:"))
-async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: Bot):
+async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: Bot, state: FSMContext):
     # Проверяем, является ли пользователь администратором
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer(text="У вас нет прав для выполнения этого действия.", show_alert=True)

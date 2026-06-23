@@ -44,7 +44,10 @@ async def update_user_notion(
     notion_token: str | None,
     notion_db_id: str | None,
     notion_status_notified: str | None = None,
-    notion_status_completed: str | None = None
+    notion_status_completed: str | None = None,
+    notion_status_created: str | None = None,
+    notion_statuses: str | None = None,
+    notion_multi_selects: str | None = None
 ):
     safe_tg_id = int(tg_id)
     await db.execute(
@@ -54,11 +57,23 @@ async def update_user_notion(
             notion_db_id = ?, 
             notion_status_notified = ?, 
             notion_status_completed = ?,
+            notion_status_created = ?,
+            notion_statuses = ?,
+            notion_multi_selects = ?,
             notion_user_id = NULL,
             notion_user_name = NULL
         WHERE tg_id = ?
         """,
-        (notion_token, notion_db_id, notion_status_notified, notion_status_completed, safe_tg_id)
+        (
+            notion_token, 
+            notion_db_id, 
+            notion_status_notified, 
+            notion_status_completed, 
+            notion_status_created,
+            notion_statuses,
+            notion_multi_selects,
+            safe_tg_id
+        )
     )
     await db.commit()
 

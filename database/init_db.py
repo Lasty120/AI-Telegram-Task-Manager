@@ -11,8 +11,10 @@ async def init_db(db_path: str):
             lang TEXT DEFAULT 'ru',
             notion_db_id TEXT,
             notion_token TEXT,
-            notion_status_notified TEXT,
             notion_status_completed TEXT,
+            notion_status_created TEXT,
+            notion_statuses TEXT,
+            notion_multi_selects TEXT,
             notion_user_id TEXT,
             notion_user_name TEXT,
             pending_notion_user_id TEXT,
@@ -28,6 +30,8 @@ async def init_db(db_path: str):
             user_id INTEGER NOT NULL,
             duration INTEGER,
             importance TEXT,
+            notion_status TEXT,
+            notion_multi_select TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id)
         );
 
@@ -61,10 +65,14 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE users ADD COLUMN notion_db_id TEXT;")
             if "notion_token" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_token TEXT;")
-            if "notion_status_notified" not in column_names:
-                await db.execute("ALTER TABLE users ADD COLUMN notion_status_notified TEXT;")
             if "notion_status_completed" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_status_completed TEXT;")
+            if "notion_status_created" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_status_created TEXT;")
+            if "notion_statuses" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_statuses TEXT;")
+            if "notion_multi_selects" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_multi_selects TEXT;")
             if "notion_user_id" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_user_id TEXT;")
             if "notion_user_name" not in column_names:
@@ -83,6 +91,10 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE tasks ADD COLUMN duration INTEGER;")
             if "importance" not in column_names:
                 await db.execute("ALTER TABLE tasks ADD COLUMN importance TEXT;")
+            if "notion_status" not in column_names:
+                await db.execute("ALTER TABLE tasks ADD COLUMN notion_status TEXT;")
+            if "notion_multi_select" not in column_names:
+                await db.execute("ALTER TABLE tasks ADD COLUMN notion_multi_select TEXT;")
             if "notion_added" not in column_names:
                 await db.execute("ALTER TABLE tasks ADD COLUMN notion_added INTEGER DEFAULT 0;")
             if "notion_page_id" not in column_names:

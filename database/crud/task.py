@@ -10,17 +10,19 @@ async def create_task(
         user_id: int,
         details: str = None,
         duration: int = None,
-        importance: str = None
+        importance: str = None,
+        notion_status: str = None,
+        notion_multi_select: str = None
 ) -> int:
     """
     Записывает задачу с точным временем unix timestamp, когда должно сработать напоминание.
     """
     async with db.execute(
         """
-        INSERT INTO tasks (content, details, time, user_id, duration, importance) 
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (content, details, time, user_id, duration, importance, notion_status, notion_multi_select) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (content, details, time, user_id, duration, importance)
+        (content, details, time, user_id, duration, importance, notion_status, notion_multi_select)
     ) as cursor:
         last_id = cursor.lastrowid
     await db.commit()
@@ -188,7 +190,9 @@ async def update_task(
     details: str = None,
     time_val: int = None,
     duration: int = None,
-    importance: str = None
+    importance: str = None,
+    notion_status: str = None,
+    notion_multi_select: str = None
 ):
     updates = []
     params = []
@@ -207,6 +211,12 @@ async def update_task(
     if importance is not None:
         updates.append("importance = ?")
         params.append(importance)
+    if notion_status is not None:
+        updates.append("notion_status = ?")
+        params.append(notion_status)
+    if notion_multi_select is not None:
+        updates.append("notion_multi_select = ?")
+        params.append(notion_multi_select)
         
     if not updates:
         return

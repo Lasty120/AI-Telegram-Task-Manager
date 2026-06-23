@@ -20,6 +20,19 @@ class TaskActionSchema(BaseModel):
         None,
         description="Только для action=create. True если пользователь хочет создать задачу И сразу добавить в Notion."
     )
+    status: Optional[str] = Field(
+        None, 
+        description="Выбранный статус задачи в Notion (выбирается из списка доступных статусов)"
+    )
+    multi_select: Optional[str] = Field(
+        None, 
+        alias="multi-select", 
+        description="Выбранное значение первого мультиселекта (спринта) в Notion (выбирается из списка доступных опций)"
+    )
+
+    model_config = {
+        "populate_by_name": True
+    }
 
 
 class MultiTaskActionSchema(BaseModel):

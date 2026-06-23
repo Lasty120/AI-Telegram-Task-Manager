@@ -5,7 +5,7 @@ from database.schemas import TaskActionSchema
 from utils.action_result import ActionResult
 from services.notion.service import add_tasks_to_notion, sync_task_status
 from database.crud.task import get_tasks_by_ids, set_task_notion_page_id, mark_tasks_notion_added
-
+from database.crud.task import update_task
 
 class NotionSyncService:
     """
@@ -56,12 +56,33 @@ class NotionSyncService:
         if not tasks:
             return ActionResult(text=TaskMessages.task_not_found())
 
+        # Определение приоритетов для статуса и мультиселекта
+        resolved_tasks = []
+        for task in tasks:
+            task_dict = dict(task)
+            
+            # Приоритет: ИИ -> Локальная БД -> Настройки пользователя
+            task_status = command.status or task_dict.get("notion_status") or self.user["notion_status_created"]
+            task_ms = command.multi_select or task_dict.get("notion_multi_select")
+            
+            # Сохраняем обновленные значения в локальной базе данных
+            await update_task(
+                db=self.db,
+                task_id=task_dict["id"],
+                notion_status=task_status,
+                notion_multi_select=task_ms
+            )
+            
+            task_dict["notion_status"] = task_status
+            task_dict["notion_multi_select"] = task_ms
+            resolved_tasks.append(task_dict)
+
         # 4. Отправляем задачи в Notion через API-интеграцию
         notion_user_id = self.user["notion_user_id"] if "notion_user_id" in self.user.keys() else None
         success_count, errors, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
             notion_db_id=notion_db_id,
-            tasks=tasks,
+            tasks=resolved_tasks,
             notion_user_id=notion_user_id,
         )
 
@@ -115,7 +136,7 @@ class NotionSyncService:
         success_count, _, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
             notion_db_id=notion_db_id,
-            tasks=[task],
+            tasks=[dict(task)],
             notion_user_id=notion_user_id,
         )
 
