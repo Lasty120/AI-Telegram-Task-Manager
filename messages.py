@@ -622,7 +622,7 @@ class NotionMessages:
         cls, 
         token: str | None, 
         db_id: str | None, 
-        notified_status: str | None = None, 
+        created_status: str | None = None,
         completed_status: str | None = None,
         db_name: str | None = None
     ) -> str:
@@ -636,14 +636,14 @@ class NotionMessages:
         else:
             db_display = f"<code>{db_id_str}</code>"
 
-        notified_str = notified_status if notified_status else "—"
+        created_str = created_status if created_status else "—"
         completed_str = completed_status if completed_status else "—"
         translations = {
             "ru": (
                 "<b>Регистрация Notion успешно завершена!</b>\n\n"
                 f"• Ключ интеграции: <code>{token_str}</code>\n"
                 f"• Источник данных: {db_display}\n"
-                f"• Статус при уведомлении: <code>{notified_str}</code>\n"
+                f"• Статус при создании: <code>{created_str}</code>\n"
                 f"• Статус при выполнении: <code>{completed_str}</code>\n\n"
                 "Все настройки сохранены. Теперь ваши задачи будут синхронизироваться с Notion."
             ),
@@ -651,7 +651,7 @@ class NotionMessages:
                 "<b>Notion registration completed successfully!</b>\n\n"
                 f"• Integration Key: <code>{token_str}</code>\n"
                 f"• Data Source: {db_display}\n"
-                f"• Notification status: <code>{notified_str}</code>\n"
+                f"• Creating status: <code>{created_str}</code>\n"
                 f"• Completion status: <code>{completed_str}</code>\n\n"
                 "All settings saved. Now your tasks will synchronize with Notion."
             )

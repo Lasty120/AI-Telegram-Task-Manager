@@ -60,7 +60,12 @@ async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: B
 
     await bot.send_message(
         chat_id=target_tg_id,
-        text=NotionMessages.notion_admin_approved(username=username, notion_user_name=pending_name),
+        text=NotionMessages.registration_success(
+            token=user_row["notion_token"],
+            db_id=user_row["notion_db_id"],
+            created_status=user_row["notion_status_created"],
+            completed_status=user_row["notion_status_completed"],
+        ),
         parse_mode="HTML"
     )
 

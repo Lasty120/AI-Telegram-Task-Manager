@@ -45,10 +45,12 @@ async def add_tasks_to_notion(
 
 
 async def _get_db_properties(db_id: str, client: NotionClient) -> dict:
-    # Возвращает словарь {prop_name: prop_type} из схемы источника данных Notion 2025.
-    resp = await client.get(f"/v1/data_sources/{db_id}")
+    # Возвращает словарь {prop_name: prop_type} из схемы источника данных или базы данных Notion 2025.
+    resp = await client.get(f"/v1/databases/{db_id}")
     if resp.status != 200:
-        return {}
+        resp = await client.get(f"/v1/data_sources/{db_id}")
+        if resp.status != 200:
+            return {}
     data = await resp.json()
     return {k: v["type"] for k, v in data.get("properties", {}).items()}
 
@@ -116,9 +118,9 @@ def _build_page_body(
             ]
         }
 
-    # Статус — ищем первое поле типа "status"
+    # Статус — ищем первое поле типа "status" или "select" с именем "Status" (регистронезависимо)
     status_prop = next(
-        (k for k, v in db_props.items() if v == "status"), None
+        (k for k, v in db_props.items() if v == "status" or (v == "select" and k.strip().lower() == "status")), None
     )
     if status_prop and task.get("notion_status"):
         prop_type = db_props[status_prop]
@@ -146,15 +148,17 @@ GROUP_INDEX = {"to_do": 0, "in_progress": 1, "complete": 2}
 
 
 async def _get_status_property(db_id: str, client: NotionClient) -> dict | None:
-    # Возвращает {"name": <имя свойства>, "options": [...], "groups": [...]}
-    # для первого свойства типа status в источнике данных, или None, если такого нет.
-    resp = await client.get(f"/v1/data_sources/{db_id}")
+    # Возвращает {"name": <имя свойства>, "options": [...], "groups": [...], "type": <тип>}
+    # для первого свойства типа status или select с именем "Status" (регистронезависимо).
+    resp = await client.get(f"/v1/databases/{db_id}")
     if resp.status != 200:
-        return None
+        resp = await client.get(f"/v1/data_sources/{db_id}")
+        if resp.status != 200:
+            return None
     data = await resp.json()
     for name, prop in data.get("properties", {}).items():
         prop_type = prop.get("type")
-        if prop_type in ("status", "select"):
+        if prop_type == "status" or (prop_type == "select" and name.strip().lower() == "status"):
             return {"name": name, **prop.get(prop_type, {}), "type": prop_type}
     return None
 
@@ -192,7 +196,7 @@ async def update_task_status_in_notion(
     notion_token: str,
     notion_db_id: str,
     page_id: str,
-    target_group: str = None,  # "in_progress" | "complete"
+    target_group: str = None,  # "in_progress" | "complete" или произвольный статус
     custom_status_name: str = None,
 ) -> bool:
     """
@@ -206,12 +210,27 @@ async def update_task_status_in_notion(
 
     option_name = custom_status_name
     if not option_name and target_group:
+        # Сначала пытаемся разрешить через группу статуса (для свойства типа "status")
         option_name = _resolve_status_option(status_schema, target_group)
+        
+        # Если не разрешилось, пробуем найти опцию с совпадающим именем (регистронезависимо)
+        if not option_name:
+            options = status_schema.get("options", [])
+            matched_option = next(
+                (opt["name"] for opt in options if opt["name"].strip().lower() == target_group.strip().lower()),
+                None
+            )
+            if matched_option:
+                option_name = matched_option
+            else:
+                # В качестве крайнего варианта используем значение target_group напрямую как имя статуса
+                option_name = target_group
 
     if not option_name:
         return False
 
-    body = {"properties": {status_schema["name"]: {"status": {"name": option_name}}}}
+    prop_type = status_schema.get("type", "status")
+    body = {"properties": {status_schema["name"]: {prop_type: {"name": option_name}}}}
 
     resp = await client.patch(f"/v1/pages/{page_id}", json=body)
     return resp.status == 200
@@ -232,6 +251,11 @@ async def sync_task_status(user, task, target_group: str):
         custom_status_name = user["notion_status_completed"] if "notion_status_completed" in user.keys() else None
     elif target_group == "in_progress":
         custom_status_name = user["notion_status_notified"] if "notion_status_notified" in user.keys() else None
+    elif target_group in ("created", "to_do"):
+        custom_status_name = user["notion_status_created"] if "notion_status_created" in user.keys() else None
+    else:
+        # Для поддержки других произвольных статусов используем target_group напрямую
+        custom_status_name = target_group
 
     try:
         ok = await update_task_status_in_notion(
