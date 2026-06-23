@@ -62,6 +62,7 @@ async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: B
             text=NotionMessages.notion_user_approved_user(),
             parse_mode="HTML"
         )
+
     except Exception as e:
         logging.error(f"Не удалось отправить уведомление об одобрении пользователю {target_tg_id}: {e}")
 

@@ -121,7 +121,8 @@ def _build_page_body(
         (k for k, v in db_props.items() if v == "status"), None
     )
     if status_prop and task.get("notion_status"):
-        properties[status_prop] = {"status": {"name": task["notion_status"]}}
+        prop_type = db_props[status_prop]
+        properties[status_prop] = {prop_type: {"name": task["notion_status"]}}
 
     # Мультиселект — ищем первое поле типа "multi_select"
     ms_prop = next(
@@ -152,8 +153,9 @@ async def _get_status_property(db_id: str, client: NotionClient) -> dict | None:
         return None
     data = await resp.json()
     for name, prop in data.get("properties", {}).items():
-        if prop["type"] == "status":
-            return {"name": name, **prop["status"]}
+        prop_type = prop.get("type")
+        if prop_type in ("status", "select"):
+            return {"name": name, **prop.get(prop_type, {}), "type": prop_type}
     return None
 
 
@@ -373,29 +375,26 @@ async def get_notion_properties_options(notion_token: str, notion_db_id: str) ->
         "multi_select_property_name": None,
         "multi_selects": []
     }
-    try:
-        resp = await client.get(f"/v1/data_sources/{notion_db_id}")
-        if resp.status != 200:
-            return result
-        data = await resp.json()
-        properties = data.get("properties", {})
+    resp = await client.get(f"/v1/data_sources/{notion_db_id}")
+    if resp.status != 200:
+        return result
+    data = await resp.json()
+    properties = data.get("properties", {})
         
-        # Ищем статус
-        for name, prop in properties.items():
-            if prop.get("type") == "status":
-                result["status_property_name"] = name
-                status_data = prop.get("status", {})
-                result["statuses"] = [opt["name"] for opt in status_data.get("options", [])]
-                break
+    # Ищем статус (status, select)
+    for name, prop in properties.items():
+        if prop.get("type") in ("status", "select"):
+            result["status_property_name"] = name
+            status_data = prop.get("status", {})
+            result["statuses"] = [opt["name"] for opt in status_data.get("options", [])]
+            break
 
-        # Ищем первый мультиселект
-        for name, prop in properties.items():
-            if prop.get("type") == "multi_select":
-                result["multi_select_property_name"] = name
-                ms_data = prop.get("multi_select", {})
-                result["multi_selects"] = [opt["name"] for opt in ms_data.get("options", [])]
-                break
-    except Exception as e:
-        logging.error(f"Notion: ошибка при получении свойств базы: {e}")
+    # Ищем первый мультиселект
+    for name, prop in properties.items():
+        if prop.get("type") == "multi_select":
+            result["multi_select_property_name"] = name
+            ms_data = prop.get("multi_select", {})
+            result["multi_selects"] = [opt["name"] for opt in ms_data.get("options", [])]
+            break
         
     return result
