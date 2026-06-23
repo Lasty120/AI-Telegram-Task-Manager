@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 import aiosqlite
 import logging
 
+import asyncio
+
 from messages import TaskMessages
 from utils.context import user_lang
 
@@ -190,5 +192,6 @@ async def send_daily_tasks_summary(bot: Bot):
                     logging.error(f"Ошибка при отправке сводки задач пользователю {tg_id}: {user_err}")
                 finally:
                     user_lang.reset(token)
+                    await asyncio.sleep(0.05)
     except Exception as e:
         logging.error(f"Ошибка при выполнении рассылки задач: {e}")

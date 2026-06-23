@@ -375,17 +375,29 @@ async def get_notion_properties_options(notion_token: str, notion_db_id: str) ->
         "multi_select_property_name": None,
         "multi_selects": []
     }
-    resp = await client.get(f"/v1/data_sources/{notion_db_id}")
+
+    # 1. Пробуем стандартный эндпоинт баз данных. Если используешь data_sources — добавь fallback.
+    resp = await client.get(f"/v1/databases/{notion_db_id}")
+
+    # Если базы нет, пробуем твой кастомный data_sources (если он нужен для твоей версии API)
     if resp.status != 200:
-        return result
+        resp = await client.get(f"/v1/data_sources/{notion_db_id}")
+        if resp.status != 200:
+            return result  # Если не нашли ни там, ни там — возвращаем пустышку
+
     data = await resp.json()
     properties = data.get("properties", {})
-        
-    # Ищем статус (status, select)
+
+    # Ищем статус (тип status ИЛИ тип select с именем 'Status')
     for name, prop in properties.items():
-        if prop.get("type") in ("status", "select"):
+        prop_type = prop.get("type")
+
+        # Если это чистый 'status' ИЛИ 'select' с названием "Status"
+        if prop_type == "status" or (prop_type == "select" and name.strip().lower() == "status"):
             result["status_property_name"] = name
-            status_data = prop.get("status", {})
+
+            # Динамически получаем внутренние данные ('status' или 'select')
+            status_data = prop.get(prop_type, {})
             result["statuses"] = [opt["name"] for opt in status_data.get("options", [])]
             break
 
@@ -396,5 +408,5 @@ async def get_notion_properties_options(notion_token: str, notion_db_id: str) ->
             ms_data = prop.get("multi_select", {})
             result["multi_selects"] = [opt["name"] for opt in ms_data.get("options", [])]
             break
-        
+
     return result

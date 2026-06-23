@@ -842,8 +842,8 @@ class NotionMessages:
         lang = user_lang.get()
         user_str = f"@{username}" if username else "Пользователь"
         translations = {
-            "ru": f"✅ Запрос одобрен: {user_str} вошел в ноушн под именем {notion_user_name}",
-            "en": f"✅ Request approved: {user_str} logged in to Notion as {notion_user_name}"
+            "ru": f"Запрос одобрен: {user_str} вошел в ноушн под именем {notion_user_name}",
+            "en": f"Request approved: {user_str} logged in to Notion as {notion_user_name}"
         }
         return translations.get(lang, translations["ru"])
 
@@ -852,8 +852,8 @@ class NotionMessages:
         lang = user_lang.get()
         user_str = f"@{username}" if username else "Пользователь"
         translations = {
-            "ru": f"❌ Запрос отклонен для {user_str} (Ноушн: {notion_user_name})",
-            "en": f"❌ Request rejected for {user_str} (Notion: {notion_user_name})"
+            "ru": f"Запрос отклонен для {user_str} (Ноушн: {notion_user_name})",
+            "en": f"Request rejected for {user_str} (Notion: {notion_user_name})"
         }
         return translations.get(lang, translations["ru"])
 

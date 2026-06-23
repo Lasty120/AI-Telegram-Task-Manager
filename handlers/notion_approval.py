@@ -1,7 +1,10 @@
 from aiogram import Router, F, Bot
-from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiosqlite import Connection
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.context import FSMContext
+import json
+from keyboards.inline_keyboards import get_status_selection_keyboard
 import logging
 
 from database.crud.user import approve_user_pending_notion, reject_user_pending_notion
@@ -55,18 +58,43 @@ async def process_approve_notion(callback: CallbackQuery, db: Connection, bot: B
         parse_mode="HTML"
     )
 
-    # Уведомляем пользователя об успешном одобрении
-    try:
-        await bot.send_message(
-            chat_id=target_tg_id,
-            text=NotionMessages.notion_user_approved_user(),
-            parse_mode="HTML"
+    user_state_key = StorageKey(
+        bot_id=bot.id,
+        chat_id=target_tg_id,
+        user_id=target_tg_id
+    )
+    # Получаем FSMContext именно для этого юзера
+    user_state = FSMContext(storage=state.storage, key=user_state_key)
+
+    # Достаем статусы из БД (в user_row у тебя уже есть notion_statuses)
+    status_options = []
+    if user_row and user_row["notion_statuses"]:
+        status_options = json.loads(user_row["notion_statuses"])
+
+    if status_options:
+        # Закидываем юзера в стейт выбора статуса
+        await user_state.set_state(NotionRegistrationStates.waiting_for_created_status)
+        # Сохраняем опции в его стейт дату, чтобы следующий хендлер их увидел
+        await user_state.update_data(
+            status_options=status_options,
+            token=user_row["notion_token"],
+            db_id=user_row["notion_db_id"]
         )
 
-    except Exception as e:
-        logging.error(f"Не удалось отправить уведомление об одобрении пользователю {target_tg_id}: {e}")
-
-    await callback.answer(text="Запрос одобрен.", show_alert=True)
+        # Отправляем юзеру сообщение с клавиатурой
+        await bot.send_message(
+            chat_id=target_tg_id,
+            text=NotionMessages.ask_created_status(),
+            parse_mode="HTML",
+            reply_markup=get_status_selection_keyboard(status_options)
+        )
+    else:
+        # Если статусов в БД нет (например, БД без статусов), просто пишем, что всё ок
+        await bot.send_message(
+            chat_id=target_tg_id,
+            text=NotionMessages.notion_admin_approved(username=username, notion_user_name=pending_name),
+            parse_mode="HTML"
+        )
 
 
 # Обработка нажатия кнопки "Отклонить" администратором

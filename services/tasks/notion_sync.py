@@ -114,6 +114,8 @@ class NotionSyncService:
         """
         await sync_task_status(self.user, task, status)
 
+
+
     async def add_single_task_to_notion(self, task: Row) -> bool:
         """
         Вспомогательный метод для автоматического добавления одной свежесозданной задачи в Notion.

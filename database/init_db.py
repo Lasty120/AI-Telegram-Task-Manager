@@ -13,6 +13,7 @@ async def init_db(db_path: str):
             notion_token TEXT,
             notion_status_completed TEXT,
             notion_status_created TEXT,
+            notion_status_modified,
             notion_statuses TEXT,
             notion_multi_selects TEXT,
             notion_user_id TEXT,
@@ -67,6 +68,8 @@ async def init_db(db_path: str):
                 await db.execute("ALTER TABLE users ADD COLUMN notion_token TEXT;")
             if "notion_status_completed" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_status_completed TEXT;")
+            if "notion_status_notified" not in column_names:
+                await db.execute("ALTER TABLE users ADD COLUMN notion_status_notified TEXT;")
             if "notion_status_created" not in column_names:
                 await db.execute("ALTER TABLE users ADD COLUMN notion_status_created TEXT;")
             if "notion_statuses" not in column_names:
