@@ -29,6 +29,10 @@ from messages import NotionMessages
 from config import ADMIN_IDS
 from handlers.states import NotionRegistrationStates
 
+from services.notion.service import get_notion_properties_options
+from services.notion import filter_done_statuses
+import json
+
 router = Router()
 
 
@@ -409,11 +413,11 @@ async def process_notion_user_callback(callback: CallbackQuery, state: FSMContex
     db_id = data.get("db_id")
 
     # Считываем доступные свойства БД из Notion для кэширования в БД
-    from services.notion.service import get_notion_properties_options
-    import json
     
     props = await get_notion_properties_options(token, db_id)
-    status_options = props.get("statuses") or []
+    raw_status_options = props.get("statuses") or []
+    # Игнорируем статусы и селекты, начинающиеся на "done" (регистронезависимо)
+    status_options = filter_done_statuses(raw_status_options)
     multi_select_options = props.get("multi_selects") or []
 
     await state.update_data(
