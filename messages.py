@@ -957,3 +957,108 @@ class NotionMessages:
             "en": f"Selected data source: <b>{name}</b>"
         }
         return translations.get(lang, translations["ru"])
+
+
+class NotionCommentMessages:
+    """Сообщения для операции добавления комментариев к задачам Notion."""
+
+    @classmethod
+    def comment_added(cls, task_content: str) -> str:
+        """Подтверждение успешного добавления комментария."""
+        lang = user_lang.get()
+        escaped = hd.quote(task_content)
+        translations = {
+            "ru": f"💬 Комментарий успешно добавлен к задаче <b>{escaped}</b> в Notion.",
+            "en": f"💬 Comment successfully added to task <b>{escaped}</b> in Notion."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def comment_failed(cls) -> str:
+        """Ошибка при добавлении комментария через Notion API."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "❌ Не удалось добавить комментарий в Notion.\n"
+                "Убедитесь, что у интеграции включены разрешения "
+                "<b>Read comments</b> и <b>Insert comments</b> в настройках Notion."
+            ),
+            "en": (
+                "❌ Failed to add comment to Notion.\n"
+                "Make sure your integration has <b>Read comments</b> and "
+                "<b>Insert comments</b> permissions enabled in Notion settings."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def page_not_found(cls) -> str:
+        """Задача ещё не добавлена в Notion — нет notion_page_id."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "⚠️ Эта задача ещё не добавлена в Notion — добавить комментарий невозможно.\n"
+                "Сначала экспортируйте задачу в Notion, написав, например: "
+                "<i>«Добавь в ноушн задачу N»</i>"
+            ),
+            "en": (
+                "⚠️ This task has not been added to Notion yet — cannot add a comment.\n"
+                "Export the task to Notion first, e.g.: "
+                "<i>\"Add task N to Notion\"</i>"
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_id_missing(cls) -> str:
+        """ИИ не смог определить ID задачи для комментирования."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "Не удалось определить, к какой задаче добавить комментарий.",
+            "en": "Could not determine which task to comment on."
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def comment_text_missing(cls) -> str:
+        """Текст комментария отсутствует в команде."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "Текст комментария не указан. "
+                "Уточните, что именно написать, например:\n"
+                "<i>«Добавь комментарий к задаче 2: обсудить с командой»</i>"
+            ),
+            "en": (
+                "Comment text is missing. "
+                "Please specify what to write, for example:\n"
+                "<i>\"Add comment to task 2: discuss with the team\"</i>"
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def not_configured(cls) -> str:
+        """Notion не подключён — нет токена или ID базы данных."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "Notion не подключён. Используйте /add_notion, "
+                "чтобы привязать свою базу данных."
+            ),
+            "en": (
+                "Notion is not connected. Use /add_notion "
+                "to link your database."
+            )
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def task_access_denied(cls) -> str:
+        """Пользователь пытается прокомментировать чужую задачу."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "У вас нет прав на комментирование этой задачи.",
+            "en": "You do not have permission to comment on this task."
+        }
+        return translations.get(lang, translations["ru"])

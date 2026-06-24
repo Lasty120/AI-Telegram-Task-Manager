@@ -1,12 +1,12 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 from typing import Optional, Literal, List
 from database.models import TaskImportance
 
 
 class TaskActionSchema(BaseModel):
-    action: Literal["create", "update", "delete", "select", "forbidden", "unknown", "add-to-notion"] = Field(
+    action: Literal["create", "update", "delete", "select", "forbidden", "unknown", "add-to-notion", "add-comment-to-notion"] = Field(
         ...,
-        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete), выбрать/найти (select), запрещено (forbidden) или непонятно (unknown), добавить в Notion (add-to-notion)"
+        description="Что нужно сделать: создать (create), изменить (update), удалить/завершить (delete), выбрать/найти (select), запрещено (forbidden) или непонятно (unknown), добавить в Notion (add-to-notion), добавить комментарий в Notion (add-comment-to-notion)"
     )
     content: Optional[str] = Field(None, description="Короткое название задачи, например 'Встреча с Тинькофф'")
     details: Optional[str] = Field(None, description="Подробное описание, перевод слова или дополнительные примечания к задаче")
@@ -28,6 +28,14 @@ class TaskActionSchema(BaseModel):
         None, 
         alias="multi-select", 
         description="Выбранное значение первого мультиселекта (спринта) в Notion (выбирается из списка доступных опций)"
+    )
+    comment_text: Optional[str] = Field(
+        None,
+        description=(
+            "Только для action=add-comment-to-notion. "
+            "Текст комментария, который нужно добавить к странице задачи в Notion. "
+            "Извлекается из сообщения пользователя дословно."
+        )
     )
 
     model_config = {

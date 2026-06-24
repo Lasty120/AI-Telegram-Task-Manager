@@ -20,7 +20,6 @@ async def process_task_command(text: str, message, user, db):
     user_tasks = await get_user_tasks(db, user["id"])
     parsed_command = await parse_user_text(text, user_tasks, user)
 
-
     if isinstance(parsed_command, str):
         await waiting_msg.delete()
         await message.answer(parsed_command)
@@ -67,6 +66,13 @@ async def process_task_command(text: str, message, user, db):
             result = ActionResult(text=AiMessages.execution_error(task_cmd.content))
         elif task_cmd.action == "add-to-notion":
             result = await notion_service.add_to_notion(command=task_cmd)
+        # ──────────────────────────────────────────────────────────────────
+        # Новый action: добавление комментария к задаче в Notion
+        # Делегируем тому же notion_service — он уже содержит всю логику
+        # валидации токена, доступа к задаче и вызова API.
+        # ──────────────────────────────────────────────────────────────────
+        elif task_cmd.action == "add-comment-to-notion":
+            result = await notion_service.add_comment_to_notion(command=task_cmd)
         else:
             result = ActionResult(
                 text=AiMessages.unknown_action(task_cmd.content or text)

@@ -557,3 +557,57 @@ async def update_page_in_notion(
     except Exception as e:
         logging.error(f"Notion: ошибка при обновлении страницы {page_id}: {e}")
         return False
+
+
+async def add_comment_to_notion_page(
+        notion_token: str,
+        page_id: str,
+        comment_text: str,
+) -> bool:
+    """
+    Добавляет page-level комментарий к существующей странице в Notion.
+
+    Требования к интеграции (Notion → my-integrations → Capabilities):
+        - Read comments  ✅
+        - Insert comments ✅
+
+    Args:
+        notion_token (str): Токен Notion-интеграции пользователя.
+        page_id (str): UUID страницы Notion, к которой добавляем комментарий.
+        comment_text (str): Текст комментария.
+
+    Returns:
+        bool: True, если комментарий успешно создан (HTTP 200), иначе False.
+    """
+    client = NotionClient(notion_token)
+
+    # Формируем тело запроса согласно Notion API Reference
+    # https://developers.notion.com/reference/create-a-comment
+    body = {
+        "parent": {
+            "page_id": page_id
+        },
+        "rich_text": [
+            {
+                "type": "text",
+                "text": {
+                    "content": comment_text
+                }
+            }
+        ]
+    }
+
+    try:
+        resp = await client.post("/v1/comments", json=body)
+        if resp.status == 200:
+            return True
+        # Логируем детали ошибки для диагностики
+        data = await resp.json()
+        logging.warning(
+            f"Notion: не удалось добавить комментарий к странице {page_id}. "
+            f"HTTP {resp.status}: {data.get('message', 'Unknown error')}"
+        )
+        return False
+    except Exception as e:
+        logging.error(f"Notion: исключение при добавлении комментария к {page_id}: {e}")
+        return False
