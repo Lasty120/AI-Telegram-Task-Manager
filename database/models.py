@@ -7,4 +7,4 @@ class TaskStatus(IntEnum):
 class TaskImportance(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
-    MOST_IMPORTANT = "most important"
+    HIGH = "high"

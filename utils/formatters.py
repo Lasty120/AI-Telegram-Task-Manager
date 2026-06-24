@@ -27,8 +27,8 @@ def format_date_header(dt: datetime, lang: str) -> str:
 def get_importance_section_label(importance: str | None, lang: str) -> str:
     """Заголовок секции важности для группировки задач в списке."""
     translations = {
-        "ru": {"most important": "Важные", "medium": "Средние", "other": "Остальные"},
-        "en": {"most important": "Important", "medium": "Medium", "other": "Other"},
+        "ru": {"high": "Важные", "medium": "Средние", "other": "Остальные"},
+        "en": {"high": "Important", "medium": "Medium", "other": "Other"},
     }
     lang_dict = translations.get(lang, translations["ru"])
     key = importance.lower() if importance else "other"
@@ -43,12 +43,12 @@ def format_importance(importance: str | None, lang: str) -> str:
         "ru": {
             "low": "[🟢] Низкий приоритет\n",
             "medium": "[🟡] Важно\n",
-            "most important": "[🔴] Очень важно\n"
+            "high": "[🔴] Очень важно\n"
         },
         "en": {
             "low": "[🟢] Low priority\n",
             "medium": "[🟡] Important\n",
-            "most important": "[🔴] Very important\n"
+            "high": "[🔴] Very important\n"
         }
     }
     
@@ -57,12 +57,12 @@ def format_importance(importance: str | None, lang: str) -> str:
     return lang_dict.get(key, f"[{importance}]")
 
 
-IMPORTANCE_ORDER = ("most important", "medium", "other")
+IMPORTANCE_ORDER = ("high", "medium", "other")
 
 
 def _importance_bucket(importance: str | None) -> str:
-    """low и None схлопываются в 'other', most important/medium остаются отдельными секциями."""
-    if importance and importance.lower() in ("most important", "medium"):
+    """low и None схлопываются в 'other', high/medium остаются отдельными секциями."""
+    if importance and importance.lower() in ("high", "medium"):
         return importance.lower()
     return "other"
 
