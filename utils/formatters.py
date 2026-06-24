@@ -96,7 +96,7 @@ def compute_local_indices(tasks: list, tz) -> dict[int, int]:
     return indices
 
 def format_tasks_list(tasks: list, tz, lang: str) -> str:
-    """Группирует задачи по датам и важности, возвращает минималистичный список без эмодзи."""
+    """Группирует задачи по датам и важности, возвращает минималистичный список."""
     local_indices = compute_local_indices(tasks, tz)
 
     tasks_by_date = defaultdict(list)
@@ -145,7 +145,7 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
                 else:
                     time_str = formatted_time
 
-                task_line = f"{local_indices[task['id']]}. [#{task['id']}] <b>{escaped_content}</b>  {time_str}"
+                task_line = f"{local_indices[task['id']]}. <b>{escaped_content}</b>  {time_str}"
                 if task['details']:
                     escaped_details = hd.quote(task['details'])
                     if is_completed:

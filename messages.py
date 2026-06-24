@@ -230,6 +230,17 @@ class TaskMessages:
         return text
 
     @classmethod
+    def status_updated_notification(cls, status_name: str) -> str:
+        # Возвращает строку уведомления о смене статуса задачи
+        lang = user_lang.get()
+        status_upper = status_name.upper()
+        translations = {
+            "ru": f"\n• СТАТУС: {status_upper}",
+            "en": f"\n• STATUS: {status_upper}"
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
     def search_empty(cls) -> str:
         lang = user_lang.get()
         translations = {

@@ -114,7 +114,37 @@ class NotionSyncService:
         """
         await sync_task_status(self.user, task, status)
 
+    async def update_task_in_notion(self, task: Row) -> bool:
+        """
+        Обновляет параметры существующей задачи в Notion, если задача ранее была успешно добавлена (notion_added = 1).
+        
+        Args:
+            task (Row): Запись задачи из локальной БД.
+            
+        Returns:
+            bool: True, если обновление выполнено успешно, иначе False.
+        """
+        task_dict = dict(task)
+        if not task_dict.get("notion_added") or not task_dict.get("notion_page_id"):
+            return False
 
+        user_dict = dict(self.user)
+        notion_token = user_dict.get("notion_token")
+        notion_db_id = user_dict.get("notion_db_id")
+
+        if not notion_token or not notion_db_id:
+            return False
+
+        notion_user_id = user_dict.get("notion_user_id")
+        
+        from services.notion.service import update_page_in_notion
+        return await update_page_in_notion(
+            notion_token=notion_token,
+            notion_db_id=notion_db_id,
+            page_id=task_dict["notion_page_id"],
+            task_dict=task_dict,
+            notion_user_id=notion_user_id,
+        )
 
     async def add_single_task_to_notion(self, task: Row) -> bool:
         """

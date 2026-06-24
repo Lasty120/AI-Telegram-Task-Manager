@@ -3,7 +3,10 @@ from datetime import datetime
 from config import TIMEZONE
 import logging
 from .client import NotionClient
+import asyncio
 
+# Глобальный словарь для кешировния баз данных Notion. Индексируется по уникальному ID БД
+_DB_PROPS_CACHE = {}
 
 async def add_tasks_to_notion(
     notion_token: str,
@@ -40,19 +43,31 @@ async def add_tasks_to_notion(
                     errors.append(f"{task['content']}: {data.get('message', resp.status)}")
             except Exception as e:
                 errors.append(f"{task['content']}: {e}")
+            await asyncio.sleep(1)
+
+    print(errors)
 
     return success_count, errors, page_ids
 
 
 async def _get_db_properties(db_id: str, client: NotionClient) -> dict:
-    # Возвращает словарь {prop_name: prop_type} из схемы источника данных или базы данных Notion 2025.
+    # 1. Если схема уже есть в кэше, возвращаем её без запроса к API
+    if db_id in _DB_PROPS_CACHE:
+        return _DB_PROPS_CACHE[db_id]
+
+    # 2. Если в кэше нет, делаем запросы к API
     resp = await client.get(f"/v1/databases/{db_id}")
     if resp.status != 200:
         resp = await client.get(f"/v1/data_sources/{db_id}")
         if resp.status != 200:
             return {}
+
     data = await resp.json()
-    return {k: v["type"] for k, v in data.get("properties", {}).items()}
+    props = {k: v["type"] for k, v in data.get("properties", {}).items()}
+
+    # 3. Сохраняем результат в кэш для будущих задач
+    _DB_PROPS_CACHE[db_id] = props
+    return props
 
 
 def _build_page_body(
@@ -434,3 +449,111 @@ async def get_notion_properties_options(notion_token: str, notion_db_id: str) ->
             break
 
     return result
+
+
+def _build_update_properties(
+    db_props: dict,
+    task: dict,
+    notion_user_id: str | None = None,
+) -> dict:
+    """
+    Формирует свойства для PATCH-запроса обновления страницы в Notion.
+    Использует только непустые значения из переданного словаря задачи.
+    """
+    properties = {}
+
+    # 1. Заголовок (title)
+    title_prop = next(
+        (k for k, v in db_props.items() if v == "title"),
+        None
+    )
+    if title_prop and task.get("content"):
+        properties[title_prop] = {
+            "title": [{"text": {"content": task["content"]}}]
+        }
+
+    # 2. Дата (date)
+    date_prop = next((k for k, v in db_props.items() if v == "date"), None)
+    if date_prop and task.get("time"):
+        try:
+            dt = datetime.fromtimestamp(task["time"], TIMEZONE)
+            properties[date_prop] = {"date": {"start": dt.isoformat()}}
+        except Exception:
+            pass
+
+    # 3. Описание (rich_text)
+    text_prop = next(
+        (k for k, v in db_props.items() if v == "rich_text"), None
+    )
+    if text_prop and task.get("details") is not None:
+        properties[text_prop] = {
+            "rich_text": [{"text": {"content": task["details"]}}]
+        }
+
+    # 4. Важность (select, исключая свойство "status")
+    select_prop = next(
+        (k for k, v in db_props.items() if v == "select" and k.strip().lower() != "status"), None
+    )
+    if select_prop and task.get("importance"):
+        properties[select_prop] = {"select": {"name": task["importance"]}}
+
+    # 5. Статус (status или select с именем "status" регистронезависимо)
+    status_prop = next(
+        (k for k, v in db_props.items() if v == "status" or (v == "select" and k.strip().lower() == "status")), None
+    )
+    if status_prop and task.get("notion_status"):
+        prop_type = db_props[status_prop]
+        properties[status_prop] = {prop_type: {"name": task["notion_status"]}}
+
+    # 6. Мультиселект (multi_select)
+    ms_prop = next(
+        (k for k, v in db_props.items() if v == "multi_select"), None
+    )
+    if ms_prop and task.get("notion_multi_select"):
+        properties[ms_prop] = {
+            "multi_select": [{"name": task["notion_multi_select"]}]
+        }
+
+    # 7. Пользователь (people)
+    people_prop = next(
+        (k for k, v in db_props.items() if v == "people"), None
+    )
+    if people_prop and notion_user_id:
+        properties[people_prop] = {
+            "people": [
+                {
+                    "object": "user",
+                    "id": notion_user_id
+                }
+            ]
+        }
+
+    return properties
+
+
+async def update_page_in_notion(
+    notion_token: str,
+    notion_db_id: str,
+    page_id: str,
+    task_dict: dict,
+    notion_user_id: str | None = None,
+) -> bool:
+    """
+    Обновляет существующую страницу задачи в Notion с помощью PATCH-запроса.
+    """
+    client = NotionClient(notion_token)
+    db_props = await _get_db_properties(notion_db_id, client)
+    if not db_props:
+        return False
+
+    properties = _build_update_properties(db_props, task_dict, notion_user_id)
+    if not properties:
+        return False
+
+    body = {"properties": properties}
+    try:
+        resp = await client.patch(f"/v1/pages/{page_id}", json=body)
+        return resp.status == 200
+    except Exception as e:
+        logging.error(f"Notion: ошибка при обновлении страницы {page_id}: {e}")
+        return False

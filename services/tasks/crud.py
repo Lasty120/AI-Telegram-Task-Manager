@@ -213,6 +213,11 @@ class TaskCRUDService:
             localized_dt=localized_dt, duration=new_duration, importance=new_importance,
         )
 
+        # Получаем обновленную версию задачи из БД для синхронизации
+        updated_task = await get_task_by_id(self.db, task_id)
+        if updated_task and "notion_added" in updated_task.keys() and updated_task["notion_added"] == 1:
+            await self.notion_service.update_task_in_notion(updated_task)
+
         display_end_time = get_display_end_time(localized_dt, new_duration)
         confirm_text = TaskMessages.task_updated(
             content=new_content,
@@ -221,6 +226,11 @@ class TaskCRUDService:
             display_end_time=display_end_time,
             importance=new_importance,
         )
+
+        # Если статус был обновлен в команде, добавляем название статуса капсом
+        if command.status is not None:
+            confirm_text += TaskMessages.status_updated_notification(command.status)
+
         return ActionResult(text=confirm_text, task_time=command.time)
 
     async def select(self, command: TaskActionSchema) -> ActionResult:
