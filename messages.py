@@ -968,8 +968,8 @@ class NotionCommentMessages:
         lang = user_lang.get()
         escaped = hd.quote(task_content)
         translations = {
-            "ru": f"💬 Комментарий успешно добавлен к задаче <b>{escaped}</b> в Notion.",
-            "en": f"💬 Comment successfully added to task <b>{escaped}</b> in Notion."
+            "ru": f"Комментарий успешно добавлен к задаче <b>{escaped}</b> в Notion.",
+            "en": f"Comment successfully added to task <b>{escaped}</b> in Notion."
         }
         return translations.get(lang, translations["ru"])
 
@@ -979,12 +979,12 @@ class NotionCommentMessages:
         lang = user_lang.get()
         translations = {
             "ru": (
-                "❌ Не удалось добавить комментарий в Notion.\n"
+                "Не удалось добавить комментарий в Notion.\n"
                 "Убедитесь, что у интеграции включены разрешения "
                 "<b>Read comments</b> и <b>Insert comments</b> в настройках Notion."
             ),
             "en": (
-                "❌ Failed to add comment to Notion.\n"
+                "Failed to add comment to Notion.\n"
                 "Make sure your integration has <b>Read comments</b> and "
                 "<b>Insert comments</b> permissions enabled in Notion settings."
             )
@@ -997,12 +997,12 @@ class NotionCommentMessages:
         lang = user_lang.get()
         translations = {
             "ru": (
-                "⚠️ Эта задача ещё не добавлена в Notion — добавить комментарий невозможно.\n"
+                "⚠Эта задача ещё не добавлена в Notion — добавить комментарий невозможно.\n"
                 "Сначала экспортируйте задачу в Notion, написав, например: "
                 "<i>«Добавь в ноушн задачу N»</i>"
             ),
             "en": (
-                "⚠️ This task has not been added to Notion yet — cannot add a comment.\n"
+                "⚠This task has not been added to Notion yet — cannot add a comment.\n"
                 "Export the task to Notion first, e.g.: "
                 "<i>\"Add task N to Notion\"</i>"
             )
@@ -1060,5 +1060,98 @@ class NotionCommentMessages:
         translations = {
             "ru": "У вас нет прав на комментирование этой задачи.",
             "en": "You do not have permission to comment on this task."
+        }
+        return translations.get(lang, translations["ru"])
+
+from utils.context import user_lang
+
+
+class FetchNotionMessages:
+    """Сообщения для команды /fetch_notion_tasks."""
+
+    @classmethod
+    def notion_not_configured(cls) -> str:
+        """Notion не настроен у пользователя."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "⚠<b>Notion не подключён.</b>\n\n"
+                "Введите /add_notion, чтобы настроить интеграцию."
+            ),
+            "en": (
+                "⚠<b>Notion is not connected.</b>\n\n"
+                "Use /add_notion to set up the integration."
+            ),
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def fetching_in_progress(cls) -> str:
+        """Индикатор загрузки во время получения задач из Notion."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "Загружаю задачи из Notion...",
+            "en": "Fetching tasks from Notion...",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def fetch_result(cls, imported: int, skipped: int) -> str:
+        """
+        Результат импорта задач из Notion.
+
+        Args:
+            imported: Количество новых импортированных задач.
+            skipped: Количество задач, пропущенных (уже в БД).
+        """
+        lang = user_lang.get()
+
+        if lang == "en":
+            if imported == 0:
+                return (
+                    "<b>Sync complete.</b>\n\n"
+                    f"No new tasks found. "
+                    f"<i>{skipped} task(s) already in your database.</i>\n\n"
+                    "Tasks without a date are scheduled for 01.01.2060 "
+                    "so they don't trigger reminders."
+                )
+            return (
+                "<b>Tasks imported from Notion!</b>\n\n"
+                f"• Added: <b>{imported}</b>\n"
+                f"• Already existed: <b>{skipped}</b>\n\n"
+                "<i>Tasks without a date are scheduled for 01.01.2060 "
+                "so they don't trigger reminders.</i>"
+            )
+
+        # Русский вариант
+        if imported == 0:
+            return (
+                "<b>Синхронизация завершена.</b>\n\n"
+                f"Новых задач не найдено. "
+                f"<i>{skipped} задач(-и) уже есть в вашей базе.</i>\n\n"
+                "Задачи без даты запланированы на 01.01.2060 — "
+                "чтобы не вызывать напоминания."
+            )
+        return (
+            "<b>Задачи из Notion импортированы!</b>\n\n"
+            f"• Добавлено: <b>{imported}</b>\n"
+            f"• Уже было: <b>{skipped}</b>\n\n"
+            "<i>Задачи без даты запланированы на 01.01.2060 — "
+            "чтобы не вызывать напоминания.</i>"
+        )
+
+    @classmethod
+    def fetch_error(cls) -> str:
+        """Общая ошибка при получении задач из Notion."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "<b>Не удалось получить задачи из Notion.</b>\n\n"
+                "Проверьте токен и доступ к базе данных, затем попробуйте снова."
+            ),
+            "en": (
+                "<b>Failed to fetch tasks from Notion.</b>\n\n"
+                "Please check your token and database access, then try again."
+            ),
         }
         return translations.get(lang, translations["ru"])

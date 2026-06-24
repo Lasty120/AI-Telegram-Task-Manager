@@ -288,3 +288,57 @@ async def get_user_today_tasks_count(
     ) as cursor:
         row = await cursor.fetchone()
         return row[0] if row else 0
+
+
+async def get_tasks_by_notion_page_ids(
+        db: aiosqlite.Connection,
+        notion_page_ids: list[str],
+        user_id: int,
+) -> set[str]:
+    """
+    Возвращает множество notion_page_id, которые уже есть в локальной БД
+    для указанного пользователя. Используется для фильтрации дублей при импорте.
+
+    Args:
+        db: Соединение с базой данных SQLite.
+        notion_page_ids: Список page_id из Notion для проверки.
+        user_id: Внутренний ID пользователя в локальной БД.
+
+    Returns:
+        Множество (set) строк notion_page_id, которые уже существуют в БД.
+    """
+    if not notion_page_ids:
+        return set()
+
+    placeholders = ", ".join("?" for _ in notion_page_ids)
+    query = (
+        f"SELECT notion_page_id FROM tasks "
+        f"WHERE notion_page_id IN ({placeholders}) AND user_id = ?"
+    )
+    params = list(notion_page_ids) + [user_id]
+
+    async with db.execute(query, tuple(params)) as cursor:
+        rows = await cursor.fetchall()
+
+    return {row[0] for row in rows if row[0]}
+
+
+async def mark_task_as_from_notion(
+    db: aiosqlite.Connection,
+    task_id: int,
+    notion_page_id: str
+) -> None:
+    """
+    Помечает задачу как импортированную из Notion:
+    устанавливает notion_added=1 и сохраняет notion_page_id.
+
+    Args:
+        db: Соединение с базой данных SQLite.
+        task_id: Локальный ID задачи.
+        notion_page_id: ID страницы в Notion.
+    """
+    await db.execute(
+        "UPDATE tasks SET notion_added = 1, notion_page_id = ? WHERE id = ?",
+        (notion_page_id, task_id)
+    )
+    await db.commit()

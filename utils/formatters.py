@@ -1,9 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 from aiogram.utils.markdown import html_decoration as hd
 from utils.context import user_lang
 from config import TIMEZONE
 from database.models import TaskStatus
+
+
+# Дата-заглушка для задач без времени (импортированных из Notion без даты)
+_NO_DATE_SENTINEL = date(2060, 1, 1)
 
 
 def format_date_header(dt: datetime, lang: str) -> str:
@@ -24,6 +28,20 @@ def format_date_header(dt: datetime, lang: str) -> str:
         return f"<b>{weekdays_ru[weekday]}, {day} {months_ru[month]}</b>"
 
 
+def _format_no_date_header(lang: str) -> str:
+    """Заголовок для группы задач без даты (с датой-заглушкой 01.01.2060)."""
+    translations = {
+        "ru": "<b>Без даты</b>",
+        "en": "<b>No date</b>",
+    }
+    return translations.get(lang, translations["ru"])
+
+
+def _is_no_date_sentinel(d: date) -> bool:
+    """Проверяет, является ли дата заглушкой (01.01.2060)."""
+    return d == _NO_DATE_SENTINEL
+
+
 def get_importance_section_label(importance: str | None, lang: str) -> str:
     """Заголовок секции важности для группировки задач в списке."""
     translations = {
@@ -34,11 +52,12 @@ def get_importance_section_label(importance: str | None, lang: str) -> str:
     key = importance.lower() if importance else "other"
     return lang_dict.get(key, lang_dict["other"])
 
+
 def format_importance(importance: str | None, lang: str) -> str:
     """Возвращает красивый бейдж уровня важности в зависимости от языка."""
     if not importance:
         return ""
-    
+
     translations = {
         "ru": {
             "low": "[🟢] Низкий приоритет\n",
@@ -51,7 +70,7 @@ def format_importance(importance: str | None, lang: str) -> str:
             "high": "[🔴] Very important\n"
         }
     }
-    
+
     lang_dict = translations.get(lang, translations["ru"])
     key = importance.lower()
     return lang_dict.get(key, f"[{importance}]")
@@ -66,12 +85,12 @@ def _importance_bucket(importance: str | None) -> str:
         return importance.lower()
     return "other"
 
-# utils/formatters.py — рядом с IMPORTANCE_ORDER / _importance_bucket
 
 def compute_local_indices(tasks: list, tz) -> dict[int, int]:
     """
     {task_id: position}, где position — номер задачи внутри СВОЕЙ ДАТЫ,
     с 1 заново на каждый день, в порядке дата -> важность -> время.
+    Задачи с датой-заглушкой 01.01.2060 группируются отдельно («Без даты»).
     Единый источник правды: используется и для рендера в Telegram,
     и для контекста, который уходит в ИИ — цифры совпадают 1:1.
     """
@@ -95,8 +114,13 @@ def compute_local_indices(tasks: list, tz) -> dict[int, int]:
 
     return indices
 
+
 def format_tasks_list(tasks: list, tz, lang: str) -> str:
-    """Группирует задачи по датам и важности, возвращает минималистичный список."""
+    """
+    Группирует задачи по датам и важности, возвращает минималистичный список.
+    Задачи с датой-заглушкой 01.01.2060 выводятся в конце под заголовком «Без даты»
+    без отображения времени.
+    """
     local_indices = compute_local_indices(tasks, tz)
 
     tasks_by_date = defaultdict(list)
@@ -105,14 +129,23 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
         tasks_by_date[task_datetime.date()].append((task_datetime, task))
 
     response_lines = []
-    sorted_dates = sorted(tasks_by_date.keys())
+    # Обычные даты сортируем по возрастанию; заглушку всегда в конец
+    sorted_dates = sorted(
+        tasks_by_date.keys(),
+        key=lambda d: (1 if _is_no_date_sentinel(d) else 0, d)
+    )
 
     for i, date_key in enumerate(sorted_dates):
         if i > 0:
             response_lines.append("")
 
         first_dt = tasks_by_date[date_key][0][0]
-        response_lines.append(format_date_header(first_dt, lang))
+
+        # Заголовок группы: обычная дата или «Без даты»
+        if _is_no_date_sentinel(date_key):
+            response_lines.append(_format_no_date_header(lang))
+        else:
+            response_lines.append(format_date_header(first_dt, lang))
 
         # Раскладываем задачи дня по важности, сохраняя порядок внутри секции
         buckets: dict[str, list] = defaultdict(list)
@@ -133,19 +166,22 @@ def format_tasks_list(tasks: list, tz, lang: str) -> str:
                 if is_completed:
                     escaped_content = f"<s>{escaped_content}</s>"
 
-                formatted_time = task_datetime.strftime('%H:%M')
-
-                if 'duration' in task.keys() and task['duration']:
-                    end_datetime = task_datetime + timedelta(minutes=task['duration'])
-                    if end_datetime.date() == task_datetime.date():
-                        formatted_end = end_datetime.strftime('%H:%M')
-                    else:
-                        formatted_end = end_datetime.strftime('%d.%m %H:%M')
-                    time_str = f"{formatted_time}–{formatted_end}"
+                # Для задач без даты время не показываем
+                if _is_no_date_sentinel(date_key):
+                    time_str = ""
                 else:
-                    time_str = formatted_time
+                    formatted_time = task_datetime.strftime('%H:%M')
+                    if 'duration' in task.keys() and task['duration']:
+                        end_datetime = task_datetime + timedelta(minutes=task['duration'])
+                        if end_datetime.date() == task_datetime.date():
+                            formatted_end = end_datetime.strftime('%H:%M')
+                        else:
+                            formatted_end = end_datetime.strftime('%d.%m %H:%M')
+                        time_str = f"  {formatted_time}–{formatted_end}"
+                    else:
+                        time_str = f"  {formatted_time}"
 
-                task_line = f"{local_indices[task['id']]}. <b>{escaped_content}</b>  {time_str}"
+                task_line = f"{local_indices[task['id']]}. <b>{escaped_content}</b>{time_str}"
                 if task['details']:
                     escaped_details = hd.quote(task['details'])
                     if is_completed:
@@ -169,7 +205,7 @@ def format_tasks_message(tasks: list, empty_text: str) -> str:
         return empty_text
 
     lang = user_lang.get()
-    
+
     formatted_list = format_tasks_list(tasks, TIMEZONE, lang)
     return f"{formatted_list}"
 

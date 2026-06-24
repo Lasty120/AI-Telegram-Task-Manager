@@ -1,6 +1,7 @@
 from aiogram import Router
 
 from handlers.start import router as start_router
+from handlers.fetch_notion_tasks import router as fetch_notion_tasks_router
 from handlers.tasks import router as task_router
 from handlers.tasks_ai import router as task_ai_router
 from handlers.voice_transcriptor import router as voice_transcriptor_router
@@ -15,6 +16,7 @@ def get_handlers_router() -> Router:
 
     # Объединяем их здесь, внутри папки handlers
     router.include_router(start_router)
+    router.include_router(fetch_notion_tasks_router)
     router.include_router(notion_registration_router)
     router.include_router(notion_approval_router)
     router.include_router(languages_router)
