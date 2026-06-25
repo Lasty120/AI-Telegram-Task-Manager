@@ -38,6 +38,6 @@ def get_due_tasks_keyboard() -> InlineKeyboardMarkup:
 
     builder.button(text=t["complete_all"], callback_data="due_tasks:complete_all")
     builder.button(text=t["sync_notion"],  callback_data="due_tasks:sync_notion")
-    builder.adjust(2)
+    builder.adjust(1)
 
     return builder.as_markup()
