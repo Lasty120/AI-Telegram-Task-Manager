@@ -5,9 +5,8 @@ from aiosqlite import Connection, Row
 
 from .client import NotionClient
 from database.crud.task import create_task, get_tasks_by_notion_page_ids, mark_task_as_from_notion
-
-# Временная метка для задач без указанного времени — 01.01.2060 00:00:00 UTC
-FALLBACK_TASK_TIMESTAMP = int(datetime(2060, 1, 1, 0, 0, 0).timestamp())
+# Используем общую константу из utils.date_utils — принцип DRY
+from utils.date_utils import FALLBACK_TASK_TIMESTAMP
 
 
 

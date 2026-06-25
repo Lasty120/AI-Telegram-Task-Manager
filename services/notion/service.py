@@ -5,6 +5,9 @@ import logging
 from .client import NotionClient
 import asyncio
 
+# Проверка на метку «задача без срока» — чтобы не отправлять 2060 год в Notion
+from utils.date_utils import is_fallback_timestamp
+
 # Глобальный словарь для кешировния баз данных Notion. Индексируется по уникальному ID БД
 _DB_PROPS_CACHE = {}
 
@@ -96,10 +99,11 @@ def _build_page_body(
 
     # Дата — ищем первое поле типа "date"
     date_prop = next((k for k, v in db_props.items() if v == "date"), None)
-    if date_prop and task.get("time"):
+    if date_prop and task.get("time") and not is_fallback_timestamp(task["time"]):
+        # Отправляем дату только если у задачи есть реальный срок (не 2060)
         try:
             dt = datetime.fromtimestamp(task["time"], TIMEZONE)
-            properties[date_prop] = {"date": {"start": dt.isoformat()}}
+            properties[date_prop] = {"date": {"start": dt.strftime("%Y-%m-%dT%H:%M:%S")}}
         except Exception:
             pass
 
@@ -611,3 +615,8 @@ async def add_comment_to_notion_page(
     except Exception as e:
         logging.error(f"Notion: исключение при добавлении комментария к {page_id}: {e}")
         return False
+
+
+def invalidate_db_cache(db_id: str):
+    """Сбрасывает кэш схемы для указанной БД."""
+    _DB_PROPS_CACHE.pop(db_id, None)

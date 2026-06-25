@@ -13,6 +13,8 @@ from utils.context import user_lang
 from config import TIMEZONE, TASKS_LIMIT_OF_PAGES
 from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
+# Импорт метки «задача без срока» и проверки из общей утилиты (DRY)
+from utils.date_utils import FALLBACK_TASK_TIMESTAMP, is_fallback_timestamp
 
 from services.tasks.conflict import ConflictService
 from services.tasks.scheduler import SchedulerService
@@ -67,10 +69,11 @@ class TaskCRUDService:
         """
         # 1. Определяем время начала задачи
         if not command.time:
-            # Если время не указано, автоматически находим первый свободный слот
-            localized_dt = await self.conflict_service.find_first_free_slot(command.duration)
-            task_timestamp = int(localized_dt.timestamp())
-            display_time = localized_dt.strftime("%Y-%m-%d %H:%M")
+            # ИИ вернул null — пользователь не указал срок.
+            # Назначаем метку «без срока» (2060), чтобы планировщик не отправил лишнее напоминание.
+            task_timestamp = FALLBACK_TASK_TIMESTAMP
+            localized_dt = datetime.fromtimestamp(task_timestamp, self.tz)
+            display_time = None  # Не отображаем дату в подтверждении
         else:
             # Парсим указанное пользователем время
             try:
@@ -136,7 +139,8 @@ class TaskCRUDService:
             return ActionResult(text=warning_text, keyboard=kb, send_separately=True)
 
         # 6. Если конфликтов нет, формируем обычное подтверждение и синхронизируем с Notion при необходимости
-        display_end_time = get_display_end_time(localized_dt, command.duration)
+        # Время окончания показываем только если у задачи есть реальный срок
+        display_end_time = get_display_end_time(localized_dt, command.duration) if display_time else None
         confirm_text = TaskMessages.task_created(
             content=command.content,
             display_time=display_time,
@@ -178,7 +182,11 @@ class TaskCRUDService:
         new_content = command.content if command.content is not None else task['content']
         new_details = command.details if command.details is not None else task['details']
         new_time_timestamp = task['time']
-        display_time = datetime.fromtimestamp(task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+        # Если задача уже была без срока — показываем «без срока», а не 2060 год
+        if is_fallback_timestamp(task['time']):
+            display_time = None
+        else:
+            display_time = datetime.fromtimestamp(task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
 
         # Пересчитываем время начала при необходимости
         if command.time is not None:
@@ -218,7 +226,8 @@ class TaskCRUDService:
         if updated_task and "notion_added" in updated_task.keys() and updated_task["notion_added"] == 1:
             await self.notion_service.update_task_in_notion(updated_task)
 
-        display_end_time = get_display_end_time(localized_dt, new_duration)
+        # Время окончания показываем только если у задачи есть реальный срок
+        display_end_time = get_display_end_time(localized_dt, new_duration) if display_time else None
         confirm_text = TaskMessages.task_updated(
             content=new_content,
             display_time=display_time,

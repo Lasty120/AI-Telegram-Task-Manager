@@ -17,6 +17,8 @@ from database.crud.task import get_user_today_tasks, get_user_today_tasks_count
 from utils.pagination import send_paginated_message_to_chat
 from utils.formatters import format_tasks_message
 from services.notion.service import update_task_status_in_notion
+# Задачи без срока (метка 2060) не должны попадать в планировщик напоминаний
+from utils.date_utils import is_fallback_timestamp
 
 # Создаем глобальный инстанс планировщика
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
@@ -95,6 +97,9 @@ async def init_scheduler(bot: Bot):
             task_imp = task['importance'] if 'importance' in task.keys() else None
 
             # 1. Напоминание о начале задачи
+            # Задачи без срока (метка 2060) пропускаем — напоминания по ним не должны приходить
+            if is_fallback_timestamp(int(task['time'])):
+                continue
             if task_time > now:
                 scheduler.add_job(
                     send_task_notification,

@@ -9,6 +9,8 @@ from config import OPENAI_DEFAULT_MODEL, OPENAI_API_KEY, OPENAI_DEFAULT_URL, TIM
 from database.schemas import MultiTaskActionSchema
 from services.ai.prompts import get_system_prompt
 from utils.formatters import compute_local_indices
+# Проверка задач без срока — передаём ИИ null вместо "2060-01-01"
+from utils.date_utils import is_fallback_timestamp
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_DEFAULT_URL)
 
@@ -42,15 +44,20 @@ async def parse_user_text(user_text: str, user_tasks: list = None, user = None) 
         for task in user_tasks:
             try:
                 task_time = datetime.fromtimestamp(task['time'], tz)
-                formatted_time = task_time.strftime("%Y-%m-%d %H:%M")
-                
-                # Рассчитываем ends_at
-                duration = task["duration"] if "duration" in task.keys() else None
-                if duration:
-                    ends_at_time = task_time + timedelta(minutes=duration)
-                    formatted_ends_at = ends_at_time.strftime("%Y-%m-%d %H:%M")
-                else:
+                # Задачи без срока не показываем ИИ как "2060-01-01" — передаём null
+                if is_fallback_timestamp(task['time']):
+                    formatted_time = None
                     formatted_ends_at = None
+                else:
+                    formatted_time = task_time.strftime("%Y-%m-%d %H:%M")
+                    # Рассчитываем ends_at только для задач с реальным сроком
+                    duration = task["duration"] if "duration" in task.keys() else None
+                    if duration:
+                        ends_at_time = task_time + timedelta(minutes=duration)
+                        formatted_ends_at = ends_at_time.strftime("%Y-%m-%d %H:%M")
+                    else:
+                        formatted_ends_at = None
+                duration = task["duration"] if "duration" in task.keys() else None
                 importance = task["importance"] if "importance" in task.keys() else None
 
             except Exception:

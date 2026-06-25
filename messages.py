@@ -66,8 +66,8 @@ class StartMessages:
 
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "<b>Гигиена задач — важно!</b>\n\n"
-                "⚠️ <b>При накоплении 2000+ задач бот начинает работать медленнее</b> — "
-                "дольше отвечает, медленнее ищет и обрабатывает команды. "
+                "⚠️ <b>При накоплении 2000+ задач ИИ начинает галлюционировать</b> — "
+                "неправильно обрабатывать команды. "
                 "Поэтому важно регулярно чистить базу от старых и выполненных задач.\n\n"
                 "🗂 <b>Как навести порядок:</b>\n"
                 "• Нажми кнопку <b>«Просроченные задачи»</b> под клавиатурой — "
@@ -125,8 +125,8 @@ class StartMessages:
                 "You can record all of the above via voice — I will understand.\n\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "<b>Task hygiene — important!</b>\n\n"
-                "⚠️ <b>When you accumulate 2000+ tasks, the bot starts to slow down</b> — "
-                "responses take longer and search becomes sluggish. "
+                "⚠️ <b>When you accumulate 2000+ tasks, the AI starts to hallucinate</b> — "
+                "commands may be executed incorrectly."
                 "It is important to regularly clean up old and completed tasks.\n\n"
                 "🗂 <b>How to tidy up:</b>\n"
                 "• Tap the <b>\"Overdue tasks\"</b> button in the reply keyboard — "
@@ -212,18 +212,21 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_created(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
+    def task_created(cls, content: str, display_time: str | None, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
+        # Локализованная метка для задачи без срока
+        no_date_label = "без срока" if lang != "en" else "no due date"
+        time_str = display_time if display_time else no_date_label
         translations = {
             "ru": {
-                "header": f"<code>СОЗДАНО</code>\n<b>{escaped_content}</b> {display_time}\n",
+                "header": f"<code>СОЗДАНО</code>\n<b>{escaped_content}</b> {time_str}\n",
                 "until": f"До {display_end_time}",
                 "status": "Статус",
                 "sprint": "Спринт"
             },
             "en": {
-                "header": f"<code>CREATED</code>\n<b>{escaped_content}</b> {display_time}\n",
+                "header": f"<code>CREATED</code>\n<b>{escaped_content}</b> {time_str}\n",
                 "until": f"Until {display_end_time}",
                 "status": "Status",
                 "sprint": "Sprint"
@@ -237,8 +240,8 @@ class TaskMessages:
         text = t["header"]
         if imp_str:
             text = f"{imp_str} " + text
-            
-        if display_end_time:
+        # Окончание времени показываем только если есть реальный срок
+        if display_end_time and display_time:
             text += t["until"]
             
         if notion_status:
@@ -288,18 +291,21 @@ class TaskMessages:
         return translations.get(lang, translations["ru"])
 
     @classmethod
-    def task_updated(cls, content: str, display_time: str, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
+    def task_updated(cls, content: str, display_time: str | None, details: str = None, display_end_time: str = None, importance: str = None, notion_status: str = None, notion_multi_select: str = None) -> str:
         lang = user_lang.get()
         escaped_content = hd.quote(content)
+        # Локализованная метка для задачи без срока
+        no_date_label = "без срока" if lang != "en" else "no due date"
+        time_str = display_time if display_time else no_date_label
         translations = {
             "ru": {
-                "header": f"<code>ОБНОВЛЕНО</code>\n<b>{escaped_content}</b> {display_time}\n",
+                "header": f"<code>ОБНОВЛЕНО</code>\n<b>{escaped_content}</b> {time_str}\n",
                 "until": f"До {display_end_time}",
                 "status": "Статус",
                 "sprint": "Спринт"
             },
             "en": {
-                "header": f"<code>UPDATED</code>\n<b>{escaped_content}</b> {display_time}\n",
+                "header": f"<code>UPDATED</code>\n<b>{escaped_content}</b> {time_str}\n",
                 "until": f"Until {display_end_time}",
                 "status": "Status",
                 "sprint": "Sprint"
@@ -313,8 +319,8 @@ class TaskMessages:
         text = t["header"]
         if imp_str:
             text = f"{imp_str} " + text
-            
-        if display_end_time:
+        # Окончание времени показываем только если есть реальный срок
+        if display_end_time and display_time:
             text += t["until"]
 
         if notion_status:
@@ -1147,15 +1153,15 @@ class FetchNotionMessages:
                     "<b>Sync complete.</b>\n\n"
                     f"No new tasks found. "
                     f"<i>{skipped} task(s) already in your database.</i>\n\n"
-                    "Tasks without a date are scheduled for 01.01.2060 "
-                    "so they don't trigger reminders."
+                    "<i>Tasks without a date are saved without a due date "
+                    "and won\u2019t trigger reminders.</i>"
                 )
             return (
                 "<b>Tasks imported from Notion!</b>\n\n"
-                f"• Added: <b>{imported}</b>\n"
-                f"• Already existed/completed: <b>{skipped}</b>\n\n"
-                "<i>Tasks without a date are scheduled for 01.01.2060 "
-                "so they don't trigger reminders.</i>"
+                f"\u2022 Added: <b>{imported}</b>\n"
+                f"\u2022 Already existed/completed: <b>{skipped}</b>\n\n"
+                "<i>Tasks without a date are saved without a due date "
+                "and won\u2019t trigger reminders.</i>"
             )
 
         # Русский вариант
@@ -1164,15 +1170,13 @@ class FetchNotionMessages:
                 "<b>Синхронизация завершена.</b>\n\n"
                 f"Новых задач не найдено. "
                 f"<i>{skipped} задач(-и) уже есть в вашей базе.</i>\n\n"
-                "Задачи без даты запланированы на 01.01.2060 — "
-                "чтобы не вызывать напоминания."
+                "<i>Задачи без даты сохраняются без срока — напоминания по ним не придут.</i>"
             )
         return (
             "<b>Задачи из Notion импортированы!</b>\n\n"
-            f"• Добавлено: <b>{imported}</b>\n"
-            f"• Уже было/выполнено: <b>{skipped}</b>\n\n"
-            "<i>Задачи без даты запланированы на 01.01.2060 — "
-            "чтобы не вызывать напоминания.</i>"
+            f"\u2022 Добавлено: <b>{imported}</b>\n"
+            f"\u2022 Уже было/выполнено: <b>{skipped}</b>\n\n"
+            "<i>Задачи без даты сохраняются без срока — напоминания по ним не придут.</i>"
         )
 
     @classmethod

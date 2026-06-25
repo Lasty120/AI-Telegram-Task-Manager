@@ -4,6 +4,8 @@ from apscheduler.jobstores.base import JobLookupError
 
 from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
+# Проверка задачи без срока — для них не планируем напоминания
+from utils.date_utils import is_fallback_timestamp
 
 
 class SchedulerService:
@@ -93,6 +95,7 @@ class SchedulerService:
         """
         Добавляет или обновляет задачу напоминания в планировщике.
         Если время задачи уже в прошлом, удаляет её из планировщика.
+        Если задача без срока (FALLBACK 2060), напоминание не ставится.
         
         Args:
             task_id (int): Уникальный ID задачи.
@@ -102,6 +105,13 @@ class SchedulerService:
             duration (int | None): Продолжительность задачи в минутах.
             importance (str | None): Важность задачи.
         """
+        # Не планируем напоминание для задач без срока (метка 2060)
+        task_ts = int(localized_dt.timestamp())
+        if is_fallback_timestamp(task_ts):
+            # Удаляем возможное устаревшее напоминание, если оно было
+            self.safe_remove_job(f"task_{task_id}")
+            return
+
         job_kwargs = {
             'bot': self.bot,
             'user_id': self.tg_id,

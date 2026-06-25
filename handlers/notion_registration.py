@@ -33,6 +33,8 @@ from services.notion.service import get_notion_properties_options
 from services.notion import filter_done_statuses
 import json
 
+from services.notion.service import invalidate_db_cache
+
 router = Router()
 
 
@@ -546,6 +548,8 @@ async def process_completed_status_callback(callback: CallbackQuery, state: FSMC
         notion_statuses=json.dumps(options, ensure_ascii=False),
         notion_multi_selects=json.dumps(multi_select_options, ensure_ascii=False)
     )
+    # Сбрасываем кэш
+    invalidate_db_cache(db_id)  # <- добавить сюда
 
     # Сохраняем выбранного пользователя как ожидающего одобрения
     await update_user_pending_notion(
