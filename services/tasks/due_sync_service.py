@@ -53,32 +53,28 @@ class DueSyncService:
         if not notion_token or not notion_db_id:
             return 0
 
-        # Берём активные задачи с привязкой к Notion
         local_tasks = await get_active_tasks_with_notion_id(self.db, self.user["id"])
         if not local_tasks:
             return 0
 
-        # Строим словарь notion_page_id → local task_id для быстрого поиска
+        # Нормализуем ID с обеих сторон одинаково, чтобы форматы (с дефисами/без)
+        # не приводили к ложному "страница не найдена"
         page_id_to_task_id: dict[str, int] = {
-            row["notion_page_id"]: row["id"]
+            _normalize_page_id(row["notion_page_id"]): row["id"]
             for row in local_tasks
             if row["notion_page_id"]
         }
         if not page_id_to_task_id:
             return 0
 
-        # Загружаем все страницы из Notion — используем ОБЩИЙ фетчер,
         client = NotionClient(notion_token)
         all_pages = await fetch_all_notion_pages(client=client, notion_db_id=notion_db_id)
 
-        # Строим словарь notion_page_id → page для быстрого поиска по страницам Notion
         notion_pages_by_id: dict[str, dict] = {
-            page.get("id", "").replace("-", ""): page
+            _normalize_page_id(page.get("id", "")): page
             for page in all_pages
         }
 
-        # Итерируемся по локальным задачам:
-        # завершаем, если задача done в Notion ИЛИ её нет в Notion вовсе
         tasks_to_complete = []
         for notion_page_id, task_id in page_id_to_task_id.items():
             page = notion_pages_by_id.get(notion_page_id)
@@ -89,6 +85,10 @@ class DueSyncService:
             return 0
 
         return await complete_tasks_by_ids(self.db, tasks_to_complete)
+
+def _normalize_page_id(page_id: str) -> str:
+        """Убирает дефисы, чтобы сравнивать ID Notion независимо от формата хранения."""
+        return (page_id or "").replace("-", "")
 
 
 def _is_page_done(page: dict) -> bool:
