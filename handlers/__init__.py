@@ -9,6 +9,7 @@ from handlers.notifications import router as notifications_router
 from handlers.languages import router as languages_router
 from handlers.notion_registration import router as notion_registration_router
 from handlers.notion_approval import router as notion_approval_router
+from handlers.due_tasks import router as due_tasks_router
 
 
 def get_handlers_router() -> Router:
@@ -17,6 +18,7 @@ def get_handlers_router() -> Router:
     # Объединяем их здесь, внутри папки handlers
     router.include_router(start_router)
     router.include_router(fetch_notion_tasks_router)
+    router.include_router(due_tasks_router)
     router.include_router(notion_registration_router)
     router.include_router(notion_approval_router)
     router.include_router(languages_router)

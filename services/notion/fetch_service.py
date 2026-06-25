@@ -10,43 +10,6 @@ from database.crud.task import create_task, get_tasks_by_notion_page_ids, mark_t
 FALLBACK_TASK_TIMESTAMP = int(datetime(2060, 1, 1, 0, 0, 0).timestamp())
 
 
-async def _fetch_all_notion_pages(
-        client: NotionClient,
-        notion_db_id: str,
-) -> list[dict]:
-    """
-    Загружает все страницы из Notion-базы данных с поддержкой пагинации.
-
-    Args:
-        client: Авторизованный клиент Notion API.
-        notion_db_id: Идентификатор базы данных Notion.
-
-    Returns:
-        Список словарей — страниц из Notion.
-    """
-    pages = []
-    has_more = True
-    start_cursor = None
-
-    while has_more:
-        body: dict = {"page_size": 100}
-        if start_cursor:
-            body["start_cursor"] = start_cursor
-
-        resp = await client.post(f"/v1/databases/{notion_db_id}/query", json=body)
-        if resp.status != 200:
-            # Пробуем альтернативный эндпоинт (data_sources)
-            resp = await client.post(f"/v1/data_sources/{notion_db_id}/query", json=body)
-            if resp.status != 200:
-                logging.error(f"Notion fetch: не удалось получить страницы (status={resp.status})")
-                break
-
-        data = await resp.json()
-        pages.extend(data.get("results", []))
-        has_more = data.get("has_more", False)
-        start_cursor = data.get("next_cursor")
-
-    return pages
 
 
 def _extract_title(properties: dict) -> str | None:
@@ -235,6 +198,44 @@ def _parse_notion_page(page: dict) -> dict | None:
         "assignee_ids": _extract_assignee_ids(properties),
     }
 
+async def fetch_all_notion_pages(
+            client: NotionClient,
+            notion_db_id: str,
+    ) -> list[dict]:
+        """
+        Загружает все страницы из Notion-базы данных с поддержкой пагинации.
+
+        Args:
+            client: Авторизованный клиент Notion API.
+            notion_db_id: Идентификатор базы данных Notion.
+
+        Returns:
+            Список словарей — страниц из Notion.
+        """
+        pages = []
+        has_more = True
+        start_cursor = None
+
+        while has_more:
+            body: dict = {"page_size": 100}
+            if start_cursor:
+                body["start_cursor"] = start_cursor
+
+            resp = await client.post(f"/v1/databases/{notion_db_id}/query", json=body)
+            if resp.status != 200:
+                # Пробуем альтернативный эндпоинт (data_sources)
+                resp = await client.post(f"/v1/data_sources/{notion_db_id}/query", json=body)
+                if resp.status != 200:
+                    logging.error(f"Notion fetch: не удалось получить страницы (status={resp.status})")
+                    break
+
+            data = await resp.json()
+            pages.extend(data.get("results", []))
+            has_more = data.get("has_more", False)
+            start_cursor = data.get("next_cursor")
+
+        return pages
+
 
 class NotionFetchService:
     """
@@ -256,6 +257,8 @@ class NotionFetchService:
         self.db = db
         self.user = user
 
+
+
     async def fetch_and_import(self) -> tuple[int, int]:
         """
         Загружает задачи из Notion и сохраняет новые в локальную БД.
@@ -274,7 +277,7 @@ class NotionFetchService:
 
         #  Получаем все страницы из Notion
         client = NotionClient(notion_token)
-        pages = await _fetch_all_notion_pages(client, notion_db_id)
+        pages = await fetch_all_notion_pages(client, notion_db_id)
 
         if not pages:
             return 0, 0

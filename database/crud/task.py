@@ -99,20 +99,6 @@ async def get_user_completed_tasks_count(db: aiosqlite.Connection, user_id: int)
         return row[0] if row else 0
 
 
-async def get_due_tasks(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
-    current_time = int(time.time())
-    async with db.execute(
-        """
-        SELECT tasks.id, tasks.content, users.tg_id 
-        FROM tasks 
-        JOIN users ON tasks.user_id = users.id 
-        WHERE tasks.time <= ? AND tasks.status = ?
-        """,
-        (current_time, TaskStatus.ACTIVE.value)  # status = 0
-    ) as cursor:
-        return await cursor.fetchall()
-
-
 async def complete_task(db: aiosqlite.Connection, task_id: int):
     await db.execute(
         "UPDATE tasks SET status = ? WHERE id = ?",
@@ -342,3 +328,113 @@ async def mark_task_as_from_notion(
         (notion_page_id, task_id)
     )
     await db.commit()
+
+
+async def get_due_tasks_for_user(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> list[aiosqlite.Row]:
+    """
+    Возвращает все активные просроченные задачи конкретного пользователя.
+    Просроченная — у которой time <= текущему времени и статус = ACTIVE.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя в локальной БД.
+
+    Returns:
+        Список строк задач, отсортированных по времени по возрастанию.
+    """
+    current_time = int(time.time())
+    async with db.execute(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = ? AND status = ? AND time <= ?
+        ORDER BY time ASC
+        """,
+        (user_id, TaskStatus.ACTIVE.value, current_time)
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def complete_all_due_tasks(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> int:
+    """
+    Отмечает все просроченные задачи пользователя как выполненные.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя.
+
+    Returns:
+        Количество задач, которые были отмечены как выполненные.
+    """
+    current_time = int(time.time())
+    async with db.execute(
+        """
+        UPDATE tasks
+        SET status = ?
+        WHERE user_id = ? AND status = ? AND time <= ?
+        """,
+        (TaskStatus.COMPLETED.value, user_id, TaskStatus.ACTIVE.value, current_time)
+    ) as cursor:
+        affected = cursor.rowcount
+    await db.commit()
+    return affected
+
+
+async def get_active_tasks_with_notion_id(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> list[aiosqlite.Row]:
+    """
+    Возвращает все активные задачи пользователя, у которых есть notion_page_id.
+    Используется для сверки с Notion: какие задачи уже завершены там, но ещё активны здесь.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя.
+
+    Returns:
+        Список задач с полем notion_page_id IS NOT NULL.
+    """
+    async with db.execute(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = ? AND status = ? AND notion_page_id IS NOT NULL
+        ORDER BY time ASC
+        """,
+        (user_id, TaskStatus.ACTIVE.value)
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def complete_tasks_by_ids(
+    db: aiosqlite.Connection,
+    task_ids: list[int],
+) -> int:
+    """
+    Отмечает список задач как выполненные по их ID.
+    Используется для синхронизации: задачи завершены в Notion, значит нужно
+    пометить их выполненными и в локальной БД.
+
+    Args:
+        db: Соединение с базой данных.
+        task_ids: Список ID задач для завершения.
+
+    Returns:
+        Количество обновлённых записей.
+    """
+    if not task_ids:
+        return 0
+
+    placeholders = ", ".join("?" for _ in task_ids)
+    async with db.execute(
+        f"UPDATE tasks SET status = ? WHERE id IN ({placeholders})",
+        [TaskStatus.COMPLETED.value] + task_ids
+    ) as cursor:
+        affected = cursor.rowcount
+    await db.commit()
+    return affected

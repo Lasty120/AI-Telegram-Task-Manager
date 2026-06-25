@@ -1118,7 +1118,7 @@ class FetchNotionMessages:
             return (
                 "<b>Tasks imported from Notion!</b>\n\n"
                 f"• Added: <b>{imported}</b>\n"
-                f"• Already existed: <b>{skipped}</b>\n\n"
+                f"• Already existed/completed: <b>{skipped}</b>\n\n"
                 "<i>Tasks without a date are scheduled for 01.01.2060 "
                 "so they don't trigger reminders.</i>"
             )
@@ -1135,7 +1135,7 @@ class FetchNotionMessages:
         return (
             "<b>Задачи из Notion импортированы!</b>\n\n"
             f"• Добавлено: <b>{imported}</b>\n"
-            f"• Уже было: <b>{skipped}</b>\n\n"
+            f"• Уже было/выполнено: <b>{skipped}</b>\n\n"
             "<i>Задачи без даты запланированы на 01.01.2060 — "
             "чтобы не вызывать напоминания.</i>"
         )
@@ -1152,6 +1152,160 @@ class FetchNotionMessages:
             "en": (
                 "<b>Failed to fetch tasks from Notion.</b>\n\n"
                 "Please check your token and database access, then try again."
+            ),
+        }
+        return translations.get(lang, translations["ru"])
+
+
+"""
+Дополнение к messages.py.
+Добавить класс DueTasksMessages в конец существующего messages.py.
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ВСТАВИТЬ В КОНЕЦ messages.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class DueTasksMessages:
+    """
+    Все тексты, связанные с просроченными задачами.
+    Поддерживает мультиязычность: ru / en.
+    """
+
+    @classmethod
+    def no_due_tasks(cls) -> str:
+        """Сообщение когда просроченных задач нет."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "У вас нет просроченных задач.",
+            "en": "You have no overdue tasks.",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def due_tasks_header(cls, count: int) -> str:
+        """
+        Заголовок списка просроченных задач.
+
+        Args:
+            count: Количество просроченных задач.
+        """
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                f"<b>Просроченные задачи: {count}</b>\n"
+                "<i>Вы можете выполнить конкретную задачу вручную — "
+                "просто напишите боту, например: «выполни задачу 3».</i>\n"
+            ),
+            "en": (
+                f"⚠<b>Overdue tasks: {count}</b>\n"
+                "<i>You can complete a specific task manually — "
+                "just write, e.g.: \"complete task 3\".</i>\n"
+            ),
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def complete_all_success(cls, count: int) -> str:
+        """
+        Подтверждение массового завершения просроченных задач.
+
+        Args:
+            count: Количество задач, помеченных выполненными.
+        """
+        lang = user_lang.get()
+        translations = {
+            "ru": f"Готово! Выполнено задач: <b>{count}</b>.",
+            "en": f"Done! Tasks completed: <b>{count}</b>.",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def complete_all_nothing(cls) -> str:
+        """Нет задач для массового завершения."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "Просроченных активных задач не найдено.",
+            "en": "No active overdue tasks found.",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def syncing_with_notion(cls) -> str:
+        """Нет задач для массового завершения."""
+        lang = user_lang.get()
+        translations = {
+            "ru": "Синхронизирую с Ноушн...",
+            "en": "Syncing with Notion...",
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def sync_notion_no_token(cls) -> str:
+        """Notion не подключён — синхронизация невозможна."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "Notion не подключён.\n"
+                "Используйте /add_notion для настройки интеграции."
+            ),
+            "en": (
+                "Notion is not connected.\n"
+                "Use /add_notion to set up the integration."
+            ),
+        }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def sync_notion_success(cls, count: int) -> str:
+        """
+        Результат синхронизации: задачи из Notion помечены выполненными.
+
+        Args:
+            count: Количество задач, автоматически завершённых.
+        """
+        lang = user_lang.get()
+        if count == 0:
+            translations = {
+                "ru": (
+                    "Синхронизация завершена.\n\n"
+                    "Все задачи с привязкой к Notion ещё активны там — "
+                    "изменений нет."
+                ),
+                "en": (
+                    "Sync complete.\n\n"
+                    "All tasks linked to Notion are still active there — "
+                    "no changes made."
+                ),
+            }
+        else:
+            translations = {
+                "ru": (
+                    f"Синхронизация завершена.\n\n"
+                    f"Задач помечено выполненными: <b>{count}</b>\n"
+                    f"(их статус в Notion начинается на «Done»)"
+                ),
+                "en": (
+                    f"Sync complete.\n\n"
+                    f"Tasks marked as completed: <b>{count}</b>\n"
+                    f"(their status in Notion starts with «Done»)"
+                ),
+            }
+        return translations.get(lang, translations["ru"])
+
+    @classmethod
+    def sync_notion_error(cls) -> str:
+        """Ошибка при синхронизации с Notion."""
+        lang = user_lang.get()
+        translations = {
+            "ru": (
+                "Не удалось выполнить синхронизацию с Notion.\n"
+                "Проверьте токен и доступ к базе данных."
+            ),
+            "en": (
+                "Failed to sync with Notion.\n"
+                "Please check your token and database access."
             ),
         }
         return translations.get(lang, translations["ru"])
