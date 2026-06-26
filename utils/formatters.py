@@ -220,3 +220,13 @@ def get_display_end_time(localized_dt: datetime, duration: int | None) -> str | 
     if task_end_time.date() == localized_dt.date():
         return task_end_time.strftime('%H:%M')
     return task_end_time.strftime('%Y-%m-%d %H:%M')
+
+
+def capitalize_first(text: str | None) -> str | None:
+    """
+    Делает первую букву строки заглавной, не трогая остальные символы.
+    В отличие от str.capitalize(), не переводит остаток в нижний регистр.
+    """
+    if not text:
+        return text
+    return text[0].upper() + text[1:]

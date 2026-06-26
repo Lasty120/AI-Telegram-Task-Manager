@@ -21,6 +21,8 @@ from services.tasks.scheduler import SchedulerService
 from services.tasks.notion_sync import NotionSyncService
 from keyboards.inline_keyboards import get_conflict_resolution_keyboard
 
+from utils.formatters import capitalize_first
+
 
 class TaskCRUDService:
     """
@@ -67,7 +69,7 @@ class TaskCRUDService:
         Returns:
             ActionResult: Подтверждение создания (или предупреждение о конфликте времени).
         """
-        # 1. Определяем время начала задачи
+        # Определяем время начала задачи
         if not command.time:
             # ИИ вернул null — пользователь не указал срок.
             # Назначаем метку «без срока» (2060), чтобы планировщик не отправил лишнее напоминание.
@@ -88,41 +90,44 @@ class TaskCRUDService:
         notion_status = command.status or self.user["notion_status_created"]
         notion_multi_select = command.multi_select
 
-        # 2. Создаем запись о задаче в локальной БД
+        capitalized_content = capitalize_first(command.content)
+        capitalized_details = capitalize_first(command.details)
+
+        # Создаем запись о задаче в локальной БД
         new_task_id = await create_task(
             db=self.db,
             user_id=self.user['id'],
             time=task_timestamp,
-            content=command.content,
-            details=command.details,
+            content=capitalized_content,
+            details=capitalized_details,
             duration=command.duration,
             importance=command.importance,
             notion_status=notion_status,
             notion_multi_select=notion_multi_select,
         )
 
-        # 3. Добавляем уведомление о задаче в планировщик
+        # Добавляем уведомление о задаче в планировщик
         self.scheduler_service.update_scheduler_jobs(
             task_id=new_task_id,
-            content=command.content,
-            details=command.details,
+            content=capitalized_content,
+            details=capitalized_details,
             localized_dt=localized_dt,
             duration=command.duration,
             importance=command.importance,
         )
 
-        # 4. Проверяем на наличие временных конфликтов
+        # Проверяем на наличие временных конфликтов
         conflict_task = None
         if command.time:
             conflict_task = await self.conflict_service.check_conflict(
                 task_timestamp, command.duration, exclude_task_id=new_task_id
             )
 
-        # 5. Если обнаружен конфликт, возвращаем интерактивную форму для разрешения коллизии
+        # Если обнаружен конфликт, возвращаем интерактивную форму для разрешения коллизии
         if conflict_task:
 
             warning_text = TaskMessages.conflict_warning(
-                new_task_content=command.content,
+                new_task_content=capitalized_content,
                 new_task_time=display_time,
                 old_task_content=conflict_task['content'],
                 old_task_time=datetime.fromtimestamp(
@@ -138,13 +143,13 @@ class TaskCRUDService:
             )
             return ActionResult(text=warning_text, keyboard=kb, send_separately=True)
 
-        # 6. Если конфликтов нет, формируем обычное подтверждение и синхронизируем с Notion при необходимости
+        # Если конфликтов нет, формируем обычное подтверждение и синхронизируем с Notion при необходимости
         # Время окончания показываем только если у задачи есть реальный срок
         display_end_time = get_display_end_time(localized_dt, command.duration) if display_time else None
         confirm_text = TaskMessages.task_created(
-            content=command.content,
+            content=capitalized_content,
             display_time=display_time,
-            details=command.details,
+            details=capitalized_details,
             display_end_time=display_end_time,
             importance=command.importance,
         )
@@ -179,8 +184,6 @@ class TaskCRUDService:
         if task['user_id'] != self.user['id']:
             return ActionResult(text=TaskMessages.task_update_access_denied())
 
-        new_content = command.content if command.content is not None else task['content']
-        new_details = command.details if command.details is not None else task['details']
         new_time_timestamp = task['time']
         # Если задача уже была без срока — показываем «без срока», а не 2060 год
         if is_fallback_timestamp(task['time']):
@@ -206,6 +209,9 @@ class TaskCRUDService:
         new_importance = command.importance if command.importance is not None else (
             task['importance'] if 'importance' in task.keys() else None
         )
+
+        new_content = capitalize_first(command.content) if command.content is not None else task['content']
+        new_details = capitalize_first(command.details) if command.details is not None else task['details']
 
         # Сохраняем изменения в БД
         await update_task(
