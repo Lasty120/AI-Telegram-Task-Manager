@@ -9,17 +9,20 @@ async def create_task(
         time: int,
         user_id: int,
         details: str = None,
-        duration: int = None
+        duration: int = None,
+        importance: str = None,
+        notion_status: str = None,
+        notion_multi_select: str = None
 ) -> int:
     """
     Записывает задачу с точным временем unix timestamp, когда должно сработать напоминание.
     """
     async with db.execute(
         """
-        INSERT INTO tasks (content, details, time, user_id, duration) 
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO tasks (content, details, time, user_id, duration, importance, notion_status, notion_multi_select) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (content, details, time, user_id, duration)
+        (content, details, time, user_id, duration, importance, notion_status, notion_multi_select)
     ) as cursor:
         last_id = cursor.lastrowid
     await db.commit()
@@ -94,20 +97,6 @@ async def get_user_completed_tasks_count(db: aiosqlite.Connection, user_id: int)
     ) as cursor:
         row = await cursor.fetchone()
         return row[0] if row else 0
-
-
-async def get_due_tasks(db: aiosqlite.Connection) -> list[aiosqlite.Row]:
-    current_time = int(time.time())
-    async with db.execute(
-        """
-        SELECT tasks.id, tasks.content, users.tg_id 
-        FROM tasks 
-        JOIN users ON tasks.user_id = users.id 
-        WHERE tasks.time <= ? AND tasks.status = ?
-        """,
-        (current_time, TaskStatus.ACTIVE.value)  # status = 0
-    ) as cursor:
-        return await cursor.fetchall()
 
 
 async def complete_task(db: aiosqlite.Connection, task_id: int):
@@ -186,7 +175,10 @@ async def update_task(
     content: str = None,
     details: str = None,
     time_val: int = None,
-    duration: int = None
+    duration: int = None,
+    importance: str = None,
+    notion_status: str = None,
+    notion_multi_select: str = None
 ):
     updates = []
     params = []
@@ -202,6 +194,15 @@ async def update_task(
     if duration is not None:
         updates.append("duration = ?")
         params.append(duration)
+    if importance is not None:
+        updates.append("importance = ?")
+        params.append(importance)
+    if notion_status is not None:
+        updates.append("notion_status = ?")
+        params.append(notion_status)
+    if notion_multi_select is not None:
+        updates.append("notion_multi_select = ?")
+        params.append(notion_multi_select)
         
     if not updates:
         return
@@ -210,3 +211,230 @@ async def update_task(
     query = f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?"
     await db.execute(query, tuple(params))
     await db.commit()
+
+
+async def mark_tasks_notion_added(db: aiosqlite.Connection, task_ids: list[int]):
+    """Помечает задачи как добавленные в Notion."""
+    if not task_ids:
+        return
+    placeholders = ", ".join("?" for _ in task_ids)
+    await db.execute(
+        f"UPDATE tasks SET notion_added = 1 WHERE id IN ({placeholders})",
+        tuple(task_ids)
+    )
+    await db.commit()
+
+
+async def  set_task_notion_page_id(db: aiosqlite.Connection, task_id: int, page_id: str):
+    """Сохраняет ID страницы Notion и помечает задачу как добавленную."""
+    await db.execute(
+        "UPDATE tasks SET notion_added = 1, notion_page_id = ? WHERE id = ?",
+        (page_id, task_id)
+    )
+    await db.commit()
+
+
+async def get_user_today_tasks(
+    db: aiosqlite.Connection, 
+    user_id: int, 
+    start_time: int,
+    end_time: int,
+    limit: int = None, 
+    offset: int = None
+) -> list[aiosqlite.Row]:
+    """
+    Получает все задачи (активные и выполненные) конкретного пользователя за указанный интервал времени (сегодня).
+    Поддерживает пагинацию с помощью параметров limit и offset.
+    """
+    query = "SELECT * FROM tasks WHERE user_id = ? AND time >= ? AND time <= ? ORDER BY time ASC"
+    params = [user_id, start_time, end_time]
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+    if offset is not None:
+        query += " OFFSET ?"
+        params.append(offset)
+        
+    async with db.execute(query, tuple(params)) as cursor:
+        return await cursor.fetchall()
+
+
+async def get_user_today_tasks_count(
+    db: aiosqlite.Connection, 
+    user_id: int,
+    start_time: int,
+    end_time: int
+) -> int:
+    """
+    Возвращает общее количество задач пользователя за указанный интервал времени (сегодня).
+    """
+    async with db.execute(
+        "SELECT COUNT(*) FROM tasks WHERE user_id = ? AND time >= ? AND time <= ?",
+        (user_id, start_time, end_time)
+    ) as cursor:
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+
+async def get_tasks_by_notion_page_ids(
+        db: aiosqlite.Connection,
+        notion_page_ids: list[str],
+        user_id: int,
+) -> set[str]:
+    """
+    Возвращает множество notion_page_id, которые уже есть в локальной БД
+    для указанного пользователя. Используется для фильтрации дублей при импорте.
+
+    Args:
+        db: Соединение с базой данных SQLite.
+        notion_page_ids: Список page_id из Notion для проверки.
+        user_id: Внутренний ID пользователя в локальной БД.
+
+    Returns:
+        Множество (set) строк notion_page_id, которые уже существуют в БД.
+    """
+    if not notion_page_ids:
+        return set()
+
+    placeholders = ", ".join("?" for _ in notion_page_ids)
+    query = (
+        f"SELECT notion_page_id FROM tasks "
+        f"WHERE notion_page_id IN ({placeholders}) AND user_id = ?"
+    )
+    params = list(notion_page_ids) + [user_id]
+
+    async with db.execute(query, tuple(params)) as cursor:
+        rows = await cursor.fetchall()
+
+    return {row[0] for row in rows if row[0]}
+
+
+async def mark_task_as_from_notion(
+    db: aiosqlite.Connection,
+    task_id: int,
+    notion_page_id: str
+) -> None:
+    """
+    Помечает задачу как импортированную из Notion:
+    устанавливает notion_added=1 и сохраняет notion_page_id.
+
+    Args:
+        db: Соединение с базой данных SQLite.
+        task_id: Локальный ID задачи.
+        notion_page_id: ID страницы в Notion.
+    """
+    await db.execute(
+        "UPDATE tasks SET notion_added = 1, notion_page_id = ? WHERE id = ?",
+        (notion_page_id, task_id)
+    )
+    await db.commit()
+
+
+async def get_due_tasks_for_user(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> list[aiosqlite.Row]:
+    """
+    Возвращает все активные просроченные задачи конкретного пользователя.
+    Просроченная — у которой time <= текущему времени и статус = ACTIVE.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя в локальной БД.
+
+    Returns:
+        Список строк задач, отсортированных по времени по возрастанию.
+    """
+    current_time = int(time.time())
+    async with db.execute(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = ? AND status = ? AND time <= ?
+        ORDER BY time ASC
+        """,
+        (user_id, TaskStatus.ACTIVE.value, current_time)
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def complete_all_due_tasks(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> int:
+    """
+    Отмечает все просроченные задачи пользователя как выполненные.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя.
+
+    Returns:
+        Количество задач, которые были отмечены как выполненные.
+    """
+    current_time = int(time.time())
+    async with db.execute(
+        """
+        UPDATE tasks
+        SET status = ?
+        WHERE user_id = ? AND status = ? AND time <= ?
+        """,
+        (TaskStatus.COMPLETED.value, user_id, TaskStatus.ACTIVE.value, current_time)
+    ) as cursor:
+        affected = cursor.rowcount
+    await db.commit()
+    return affected
+
+
+async def get_active_tasks_with_notion_id(
+    db: aiosqlite.Connection,
+    user_id: int,
+) -> list[aiosqlite.Row]:
+    """
+    Возвращает все активные задачи пользователя, у которых есть notion_page_id.
+    Используется для сверки с Notion: какие задачи уже завершены там, но ещё активны здесь.
+
+    Args:
+        db: Соединение с базой данных.
+        user_id: Внутренний ID пользователя.
+
+    Returns:
+        Список задач с полем notion_page_id IS NOT NULL.
+    """
+    async with db.execute(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = ? AND status = ? AND notion_page_id IS NOT NULL
+        ORDER BY time ASC
+        """,
+        (user_id, TaskStatus.ACTIVE.value)
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def complete_tasks_by_ids(
+    db: aiosqlite.Connection,
+    task_ids: list[int],
+) -> int:
+    """
+    Отмечает список задач как выполненные по их ID.
+    Используется для синхронизации: задачи завершены в Notion, значит нужно
+    пометить их выполненными и в локальной БД.
+
+    Args:
+        db: Соединение с базой данных.
+        task_ids: Список ID задач для завершения.
+
+    Returns:
+        Количество обновлённых записей.
+    """
+    if not task_ids:
+        return 0
+
+    placeholders = ", ".join("?" for _ in task_ids)
+    async with db.execute(
+        f"UPDATE tasks SET status = ? WHERE id IN ({placeholders})",
+        [TaskStatus.COMPLETED.value] + task_ids
+    ) as cursor:
+        affected = cursor.rowcount
+    await db.commit()
+    return affected

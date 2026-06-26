@@ -14,4 +14,12 @@ GROQ_API_KEY = getenv("GROQ_API_KEY")
 TIMEZONE_STR = getenv("TIMEZONE", "Asia/Almaty")
 TIMEZONE = pytz.timezone(TIMEZONE_STR)
 
+NOTION_API_KEY = getenv("NOTION_API_KEY")
+NOTION_DB_URL = getenv("NOTION_DB_URL")
+
+TASKS_LIMIT_OF_PAGES = 10
+
+ADMIN_IDS_STR = getenv("ADMIN_IDS", "")
+ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS_STR.split(",") if x.strip().isdigit()]
+
 

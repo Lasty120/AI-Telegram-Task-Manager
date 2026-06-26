@@ -3,12 +3,14 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiosqlite import Connection, Row
+from apscheduler.jobstores.base import JobLookupError
 
 from database.crud.task import complete_task, get_task_by_id, update_task
 from messages import TaskMessages, NotificationMessages
-from services.scheduler import scheduler, send_task_notification, send_task_end_notification
+from services.notion.service import sync_task_status
+from services.scheduler import scheduler, send_task_notification
 from config import TIMEZONE
-from services.tasks.actions import TaskActionsService
+from services.tasks import ConflictService, SchedulerService, NotionSyncService
 
 router = Router()
 
@@ -26,15 +28,12 @@ async def complete_task_callback(callback: CallbackQuery, db: Connection, user: 
         return
 
     await complete_task(db, task_id)
+    await sync_task_status(user, task, "complete")
 
     # Попытка удалить задачу из планировщика, если она там осталась
     try:
         scheduler.remove_job(f"task_{task_id}")
-    except Exception:
-        pass
-    try:
-        scheduler.remove_job(f"task_end_{task_id}")
-    except Exception:
+    except JobLookupError:
         pass
 
     await callback.answer(TaskMessages.task_completed_success())
@@ -89,31 +88,9 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
         replace_existing=True
     )
 
-    # Если есть длительность, перепланируем уведомление о завершении
-    task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 0
-    if task_dur > 0:
-        new_end_dt = new_time_dt + timedelta(minutes=task_dur)
-        scheduler.add_job(
-            send_task_end_notification,
-            trigger='date',
-            run_date=new_end_dt,
-            kwargs={
-                'bot': callback.message.bot,
-                'user_id': user['tg_id'],
-                'task_text': task['content'],
-                'task_details': task['details'],
-                'task_id': task_id
-            },
-            id=f"task_end_{task_id}",
-            replace_existing=True
-        )
-    else:
-        try:
-            scheduler.remove_job(f"task_end_{task_id}")
-        except Exception:
-            pass
 
-    await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=Tru)
+
+    await callback.answer(NotificationMessages.task_delayed(new_time_dt), show_alert=True)
 
     # Обновляем сообщение в чате
     text = TaskMessages.task_notification(task['content'], task['details'])
@@ -129,28 +106,38 @@ async def delay_task_callback(callback: CallbackQuery, db: Connection, user: Row
 @router.callback_query(F.data.startswith("resolve_conflict:"))
 async def resolve_conflict_callback(callback: CallbackQuery, db: Connection, user: Row):
     parts = callback.data.split(":")
+    if len(parts) < 5:
+        await callback.answer(TaskMessages.invalid_request(), show_alert=True)
+        return
 
     action = parts[1]
-
-    action_service = TaskActionsService(db=db, user=user, bot=callback.message.bot)
-
-    if action == "ignore":
-        await action_service.resolve_conflict(action=action, message=callback.message)
-        return
-
     new_task_id = int(parts[2])
     old_task_id = int(parts[3])
+    add_to_notion = parts[4] == "1"
 
-    if len(parts) < 4:
-        await callback.answer("Некорректный запрос", show_alert=True)
-        return
-    
-    await action_service.resolve_conflict(
+    # Инициализируем планировщик, Notion и конфликт-сервисы
+    scheduler_service = SchedulerService(bot=callback.message.bot, user=user)
+    notion_service = NotionSyncService(db=db, user=user)
+    conflict_service = ConflictService(
+        db=db,
+        user=user,
+        scheduler_service=scheduler_service,
+        notion_service=notion_service
+    )
+
+    msg_text = await conflict_service.resolve_conflict(
         action=action,
         new_task_id=new_task_id,
         old_task_id=old_task_id,
-        message=callback.message
+        add_to_notion=add_to_notion
     )
+
     await callback.answer()
+    if msg_text:
+        await callback.message.edit_text(
+            text=msg_text,
+            parse_mode="HTML",
+            reply_markup=None
+        )
 
 

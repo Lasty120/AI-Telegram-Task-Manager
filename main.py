@@ -9,10 +9,11 @@ from middlewares.user import UserMiddleware
 from database.init_db import init_db
 from services.scheduler import init_scheduler
 
-dp = Dispatcher()
-bot = Bot(token=TOKEN)
+
 
 async def main():
+    dp = Dispatcher()
+    bot = Bot(token=TOKEN)
     await init_db(db_path=DB_PATH)
     dp.include_router(get_handlers_router())
 
@@ -38,6 +39,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Бот остановлен пользователем")
-    finally:
-        # Корректно закрываем сессию только при полном выключении скрипта
-        asyncio.run(bot.session.close())
