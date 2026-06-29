@@ -1,19 +1,27 @@
+"""
+services/tasks/crud.py
+
+Сервис CRUD-операций над задачами.
+Изменения (Этап 4):
+  - db: Connection заменён на task_repo: TaskRepository + search_repo: SearchRepository.
+  - Все прямые вызовы database.crud.task.* заменены на методы репозиториев.
+  - Зависимости вводятся через конструктор (DI).
+"""
+
 from datetime import datetime
+
 from aiogram import Bot
-from aiosqlite import Connection, Row
 
 from messages import TaskMessages
 from database.schemas import TaskActionSchema
-from database.crud.task import (
-    create_task, get_task_by_id, get_tasks_by_ids, update_task, complete_task, save_user_search
-)
+from database.repositories import TaskRepository, SearchRepository
 from keyboards.reply_keyboards import get_main_kb
 from keyboards.inline_keyboards import get_pagination_keyboard
 from utils.context import user_lang
 from config import TIMEZONE, TASKS_LIMIT_OF_PAGES
 from utils.formatters import get_display_end_time
 from utils.action_result import ActionResult
-# Импорт метки «задача без срока» и проверки из общей утилиты (DRY)
+# Метка «задача без срока» и проверка — единое определение (DRY)
 from utils.date_utils import FALLBACK_TASK_TIMESTAMP, is_fallback_timestamp
 
 from services.tasks.conflict import ConflictService
@@ -26,32 +34,41 @@ from utils.formatters import capitalize_first
 
 class TaskCRUDService:
     """
-    Сервис для выполнения CRUD операций (создание, чтение/поиск, обновление, выполнение) с задачами.
-    Координирует действия с планировщиком (SchedulerService), сервисом Notion (NotionSyncService)
-    и проверкой конфликтов (ConflictService).
+    Сервис для выполнения CRUD-операций (создание, поиск, обновление, удаление) с задачами.
+
+    Координирует действия с:
+    - SchedulerService  — управление напоминаниями в APScheduler.
+    - NotionSyncService — синхронизация с Notion API.
+    - ConflictService   — проверка и разрешение временных коллизий.
+
+    Зависимости получает через конструктор (инъекция зависимостей).
+    Не выполняет прямых SQL-запросов — делегирует их репозиториям.
     """
 
     def __init__(
         self,
-        db: Connection,
-        user: Row,
+        task_repo: TaskRepository,
+        search_repo: SearchRepository,
+        user: dict,
         bot: Bot,
         conflict_service: ConflictService,
         scheduler_service: SchedulerService,
-        notion_service: NotionSyncService
+        notion_service: NotionSyncService,
     ):
         """
         Инициализирует CRUD-сервис со всеми необходимыми зависимостями.
-        
+
         Args:
-            db (Connection): Соединение с БД.
-            user (Row): Запись пользователя.
+            task_repo (TaskRepository): Репозиторий задач (asyncpg).
+            search_repo (SearchRepository): Репозиторий кэша поиска (asyncpg).
+            user (dict): Словарь пользователя из БД.
             bot (Bot): Экземпляр бота Telegram.
-            conflict_service (ConflictService): Зависимость для управления коллизиями времени.
+            conflict_service (ConflictService): Зависимость для управления коллизиями.
             scheduler_service (SchedulerService): Зависимость планировщика уведомлений.
-            notion_service (NotionSyncService): Зависимость для синхронизации с Notion.
+            notion_service (NotionSyncService): Зависимость синхронизации с Notion.
         """
-        self.db = db
+        self.task_repo = task_repo
+        self.search_repo = search_repo
         self.user = user
         self.bot = bot
         self.tz = TIMEZONE
@@ -61,23 +78,24 @@ class TaskCRUDService:
 
     async def create(self, command: TaskActionSchema) -> ActionResult:
         """
-        Создает новую задачу в базе данных, планирует уведомления и обрабатывает коллизии времени.
-        
+        Создаёт новую задачу в репозитории, планирует уведомления
+        и обрабатывает коллизии времени.
+
         Args:
             command (TaskActionSchema): Параметры новой задачи.
-            
+
         Returns:
-            ActionResult: Подтверждение создания (или предупреждение о конфликте времени).
+            ActionResult: Подтверждение создания (или форма разрешения конфликта).
         """
         # Определяем время начала задачи
         if not command.time:
             # ИИ вернул null — пользователь не указал срок.
-            # Назначаем метку «без срока» (2060), чтобы планировщик не отправил лишнее напоминание.
+            # Назначаем метку «без срока» (2060), чтобы планировщик не отправил уведомление.
             task_timestamp = FALLBACK_TASK_TIMESTAMP
             localized_dt = datetime.fromtimestamp(task_timestamp, self.tz)
             display_time = None  # Не отображаем дату в подтверждении
         else:
-            # Парсим указанное пользователем время
+            # Парсим время, указанное пользователем
             try:
                 naive_dt = datetime.strptime(command.time, "%Y-%m-%d %H:%M")
                 localized_dt = self.tz.localize(naive_dt)
@@ -87,17 +105,16 @@ class TaskCRUDService:
                 return ActionResult(text=TaskMessages.invalid_time_format())
 
         # Разрешаем статус и мультиселект для Notion
-        notion_status = command.status or self.user["notion_status_created"]
+        notion_status = command.status or self.user.get("notion_status_created")
         notion_multi_select = command.multi_select
 
         capitalized_content = capitalize_first(command.content)
         capitalized_details = capitalize_first(command.details)
 
-        # Создаем запись о задаче в локальной БД
-        new_task_id = await create_task(
-            db=self.db,
-            user_id=self.user['id'],
-            time=task_timestamp,
+        # Создаём запись о задаче через репозиторий
+        new_task_id = await self.task_repo.create(
+            user_id=self.user["id"],
+            time_val=task_timestamp,
             content=capitalized_content,
             details=capitalized_details,
             duration=command.duration,
@@ -106,7 +123,7 @@ class TaskCRUDService:
             notion_multi_select=notion_multi_select,
         )
 
-        # Добавляем уведомление о задаче в планировщик
+        # Добавляем напоминание о задаче в планировщик
         self.scheduler_service.update_scheduler_jobs(
             task_id=new_task_id,
             content=capitalized_content,
@@ -116,34 +133,33 @@ class TaskCRUDService:
             importance=command.importance,
         )
 
-        # Проверяем на наличие временных конфликтов
+        # Проверяем на наличие временных конфликтов (только для задач с реальным сроком)
         conflict_task = None
         if command.time:
             conflict_task = await self.conflict_service.check_conflict(
                 task_timestamp, command.duration, exclude_task_id=new_task_id
             )
 
-        # Если обнаружен конфликт, возвращаем интерактивную форму для разрешения коллизии
+        # Если обнаружен конфликт — возвращаем интерактивную форму разрешения коллизии
         if conflict_task:
-
             warning_text = TaskMessages.conflict_warning(
                 new_task_content=capitalized_content,
                 new_task_time=display_time,
-                old_task_content=conflict_task['content'],
+                old_task_content=conflict_task["content"],
                 old_task_time=datetime.fromtimestamp(
-                    conflict_task['time'], self.tz
-                ).strftime("%Y-%m-%d %H:%M")
+                    conflict_task["time"], self.tz
+                ).strftime("%Y-%m-%d %H:%M"),
             )
             kb = get_conflict_resolution_keyboard(
-                old_task_id=conflict_task['id'],
+                old_task_id=conflict_task["id"],
                 new_task_id=new_task_id,
-                old_task_content=conflict_task['content'],
+                old_task_content=conflict_task["content"],
                 new_task_content=command.content,
-                add_to_notion=command.add_to_notion
+                add_to_notion=command.add_to_notion,
             )
             return ActionResult(text=warning_text, keyboard=kb, send_separately=True)
 
-        # Если конфликтов нет, формируем обычное подтверждение и синхронизируем с Notion при необходимости
+        # Конфликтов нет — формируем обычное подтверждение
         # Время окончания показываем только если у задачи есть реальный срок
         display_end_time = get_display_end_time(localized_dt, command.duration) if display_time else None
         confirm_text = TaskMessages.task_created(
@@ -156,7 +172,7 @@ class TaskCRUDService:
 
         # Синхронизация с Notion (если пользователь явно запросил add_to_notion)
         if command.add_to_notion:
-            new_task = await get_task_by_id(self.db, new_task_id)
+            new_task = await self.task_repo.get_by_id(new_task_id)
             if new_task:
                 await self.notion_service.add_single_task_to_notion(new_task)
 
@@ -164,11 +180,12 @@ class TaskCRUDService:
 
     async def update(self, command: TaskActionSchema) -> ActionResult:
         """
-        Обновляет параметры существующей задачи в БД и обновляет её в планировщике.
-        
+        Обновляет параметры существующей задачи в репозитории
+        и синхронизирует изменения в планировщике и Notion.
+
         Args:
             command (TaskActionSchema): Параметры изменения.
-            
+
         Returns:
             ActionResult: Подтверждение обновления.
         """
@@ -176,20 +193,20 @@ class TaskCRUDService:
         if not task_id:
             return ActionResult(text=TaskMessages.task_update_id_missing())
 
-        task = await get_task_by_id(self.db, task_id)
+        task = await self.task_repo.get_by_id(task_id)
         if not task:
             return ActionResult(text=TaskMessages.task_not_found())
 
         # Защита: редактировать можно только свои задачи
-        if task['user_id'] != self.user['id']:
+        if task["user_id"] != self.user["id"]:
             return ActionResult(text=TaskMessages.task_update_access_denied())
 
-        new_time_timestamp = task['time']
+        new_time_timestamp = task["time"]
         # Если задача уже была без срока — показываем «без срока», а не 2060 год
-        if is_fallback_timestamp(task['time']):
+        if is_fallback_timestamp(task["time"]):
             display_time = None
         else:
-            display_time = datetime.fromtimestamp(task['time'], self.tz).strftime("%Y-%m-%d %H:%M")
+            display_time = datetime.fromtimestamp(task["time"], self.tz).strftime("%Y-%m-%d %H:%M")
 
         # Пересчитываем время начала при необходимости
         if command.time is not None:
@@ -203,33 +220,37 @@ class TaskCRUDService:
         else:
             localized_dt = datetime.fromtimestamp(new_time_timestamp, self.tz)
 
-        new_duration = command.duration if command.duration is not None else (
-            task['duration'] if 'duration' in task.keys() else None
-        )
-        new_importance = command.importance if command.importance is not None else (
-            task['importance'] if 'importance' in task.keys() else None
+        new_duration = command.duration if command.duration is not None else task.get("duration")
+        new_importance = command.importance if command.importance is not None else task.get("importance")
+
+        new_content = capitalize_first(command.content) if command.content is not None else task["content"]
+        new_details = capitalize_first(command.details) if command.details is not None else task.get("details")
+
+        # Сохраняем изменения через репозиторий
+        await self.task_repo.update(
+            task_id,
+            content=new_content,
+            details=new_details,
+            time=new_time_timestamp,
+            duration=new_duration,
+            importance=new_importance,
+            notion_status=command.status,
+            notion_multi_select=command.multi_select,
         )
 
-        new_content = capitalize_first(command.content) if command.content is not None else task['content']
-        new_details = capitalize_first(command.details) if command.details is not None else task['details']
-
-        # Сохраняем изменения в БД
-        await update_task(
-            db=self.db, task_id=task_id,
-            content=new_content, details=new_details,
-            time_val=new_time_timestamp, duration=new_duration, importance=new_importance,
-            notion_status=command.status, notion_multi_select=command.multi_select,
-        )
-        
-        # Обновляем задачу в планировщике
+        # Обновляем напоминание в планировщике
         self.scheduler_service.update_scheduler_jobs(
-            task_id=task_id, content=new_content, details=new_details,
-            localized_dt=localized_dt, duration=new_duration, importance=new_importance,
+            task_id=task_id,
+            content=new_content,
+            details=new_details,
+            localized_dt=localized_dt,
+            duration=new_duration,
+            importance=new_importance,
         )
 
-        # Получаем обновленную версию задачи из БД для синхронизации
-        updated_task = await get_task_by_id(self.db, task_id)
-        if updated_task and "notion_added" in updated_task.keys() and updated_task["notion_added"] == 1:
+        # Получаем обновлённую задачу для синхронизации с Notion
+        updated_task = await self.task_repo.get_by_id(task_id)
+        if updated_task and updated_task.get("notion_added") == 1:
             await self.notion_service.update_task_in_notion(updated_task)
 
         # Время окончания показываем только если у задачи есть реальный срок
@@ -242,7 +263,7 @@ class TaskCRUDService:
             importance=new_importance,
         )
 
-        # Если статус был обновлен в команде, добавляем название статуса капсом
+        # Если статус был обновлён, добавляем название статуса в подтверждение
         if command.status is not None:
             confirm_text += TaskMessages.status_updated_notification(command.status)
 
@@ -250,32 +271,33 @@ class TaskCRUDService:
 
     async def select(self, command: TaskActionSchema) -> ActionResult:
         """
-        Ищет задачи и выводит их список с пагинацией.
-        
+        Ищет задачи и возвращает их список с пагинацией.
+
         Args:
             command (TaskActionSchema): Параметры поиска.
-            
+
         Returns:
             ActionResult: Результаты поиска с кнопками навигации.
         """
         if not command.task_ids:
             return ActionResult(text=TaskMessages.search_empty())
 
-        # Сохраняем историю поиска
-        await save_user_search(
-            db=self.db,
+        # Сохраняем историю поиска через репозиторий
+        await self.search_repo.save(
             user_id=self.user["id"],
             task_ids=command.task_ids,
-            query=command.content or "поиск"
+            query=command.content or "поиск",
         )
 
         limit = TASKS_LIMIT_OF_PAGES
         total_count = len(command.task_ids)
 
-        # Достаем первую страницу задач
-        tasks = await get_tasks_by_ids(
-            db=self.db, task_ids=command.task_ids,
-            user_id=self.user["id"], limit=limit, offset=0
+        # Достаём первую страницу задач из репозитория
+        tasks = await self.task_repo.get_by_ids(
+            user_id=self.user["id"],
+            ids=command.task_ids,
+            limit=limit,
+            offset=0,
         )
 
         if not tasks:
@@ -285,7 +307,7 @@ class TaskCRUDService:
             query=command.content or "поиск", tasks=tasks, tz=self.tz
         )
 
-        # Если задач больше, чем лимит страницы, добавляем пагинацию
+        # Если задач больше, чем лимит страницы — добавляем индикатор пагинации
         if total_count > limit:
             lang = user_lang.get()
             page_word = "Page" if lang == "en" else "Страница"
@@ -299,20 +321,21 @@ class TaskCRUDService:
             text=response_text,
             keyboard=kb or get_main_kb(),
             send_separately=True,
-            task_time=command.time
+            task_time=command.time,
         )
 
     async def delete(self, command: TaskActionSchema) -> ActionResult:
         """
         Завершает (удаляет) указанные задачи, стирая напоминания и обновляя статус в Notion.
-        
+
         Args:
             command (TaskActionSchema): Запрос на удаление.
-            
+
         Returns:
             ActionResult: Текст подтверждения выполнения.
         """
-        task_ids = []
+        # Объединяем task_id и task_ids в единый список без дублей
+        task_ids: list[int] = []
         if command.task_id:
             task_ids.append(command.task_id)
         if command.task_ids:
@@ -323,26 +346,26 @@ class TaskCRUDService:
         if not task_ids:
             return ActionResult(text=TaskMessages.task_delete_id_missing())
 
-        completed_titles = []
+        completed_titles: list[str] = []
         not_found_count = 0
         denied_count = 0
 
         for tid in task_ids:
-            task = await get_task_by_id(self.db, tid)
+            task = await self.task_repo.get_by_id(tid)
             if not task:
                 not_found_count += 1
                 continue
-            if task['user_id'] != self.user['id']:
+            if task["user_id"] != self.user["id"]:
                 denied_count += 1
                 continue
-                
-            # Помечаем задачу как завершенную в локальной БД
-            await complete_task(self.db, tid)
-            # Удаляем ее из планировщика
+
+            # Помечаем задачу как выполненную в репозитории
+            await self.task_repo.complete(tid)
+            # Удаляем напоминание из планировщика
             self.scheduler_service.remove_scheduler_jobs(tid)
-            # Синхронизируем изменение с Notion
+            # Синхронизируем изменение статуса с Notion
             await self.notion_service.sync_task_status_to_notion(task, "complete")
-            completed_titles.append(task['content'])
+            completed_titles.append(task["content"])
 
         if not completed_titles:
             if denied_count > 0:
@@ -352,5 +375,5 @@ class TaskCRUDService:
 
         if len(completed_titles) == 1:
             return ActionResult(text=TaskMessages.task_completed(completed_titles[0]), task_time=command.time)
-        else:
-            return ActionResult(text=TaskMessages.tasks_completed_plural(completed_titles), task_time=command.time)
+
+        return ActionResult(text=TaskMessages.tasks_completed_plural(completed_titles), task_time=command.time)
