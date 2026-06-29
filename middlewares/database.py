@@ -1,14 +1,14 @@
+from typing import Any, Awaitable, Callable, Dict
+
+import asyncpg
 from aiogram import BaseMiddleware
-from typing import Callable, Dict, Any, Awaitable
 from aiogram.types import TelegramObject
 
-import aiosqlite
 
-
-# Middleware на создание изолированных соединений с БД
+# Middleware на выдачу изолированного соединения с БД на каждый Update.
 class DbSessionMiddleware(BaseMiddleware):
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
         super().__init__()
 
     async def __call__(
@@ -17,10 +17,10 @@ class DbSessionMiddleware(BaseMiddleware):
             event: TelegramObject,
             data: Dict[str, Any]
     ) -> Any:
-        # Открываем соединение с базой данных на каждый запрос
-        async with aiosqlite.connect(self.db_path) as db:
-            # Чтобы была возможность работать со строками как со словарями (по именам колонок):
-            db.row_factory = aiosqlite.Row
-
-            data["db"] = db
-            return await handler(event, data)
+        # Берём соединение из пула на время обработки одного Update от Telegram
+        async with self.pool.acquire() as connection:
+            # Транзакция на весь Update: если хендлер выбросит исключение —
+            # все изменения в БД за это соединение откатятся автоматически
+            async with connection.transaction():
+                data["db"] = connection
+                return await handler(event, data)

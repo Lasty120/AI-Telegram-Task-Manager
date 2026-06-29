@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from handlers import get_handlers_router
-from config import TOKEN, DB_PATH
+from config import TOKEN
 from middlewares.database import DbSessionMiddleware
 from middlewares.user import UserMiddleware
 from database.pool import create_pool, close_pool
@@ -25,7 +25,9 @@ async def main():
     await init_scheduler(bot)
 
     await bot.delete_webhook(drop_pending_updates=True)
-    dp.update.middleware(DbSessionMiddleware(db_path=DB_PATH))
+    # Middleware теперь раздаёт хендлерам asyncpg.Connection из пула,
+    # а не открывает aiosqlite.connect на каждый Update
+    dp.update.middleware(DbSessionMiddleware(pool=pool))
     dp.update.middleware(UserMiddleware())
 
     try:

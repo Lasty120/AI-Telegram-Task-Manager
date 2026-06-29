@@ -1,16 +1,15 @@
-from typing import Callable, Dict, Any, Awaitable
+from typing import Any, Awaitable, Callable, Dict
 
+import asyncpg
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-import aiosqlite
-
-# Импортируй свою обновленную функцию CRUD
 from database.crud.user import get_or_create_user
 from utils.context import user_lang
 
 
-# Middleware на получение и создание юзера
+# Middleware на получение и создание юзера.
+
 class UserMiddleware(BaseMiddleware):
     async def __call__(
             self,
@@ -19,12 +18,13 @@ class UserMiddleware(BaseMiddleware):
             data: Dict[str, Any],
     ):
 
-        db: aiosqlite.Connection = data["db"]
+        db: asyncpg.Connection = data["db"]
         tg_user = data["event_from_user"]
         if not tg_user:
             return await handler(event, data)
 
-        # Передаем соединение db в твою CRUD функцию
+        # Передаём соединение db в CRUD-функцию (её сигнатура и реализация
+        # под asyncpg.Connection переводятся отдельно, вне рамок этой middleware)
         user = await get_or_create_user(
             db=db,
             tg_id=tg_user.id,
