@@ -117,6 +117,36 @@ class TaskRepository(BaseRepository):
         )
 
     # ------------------------------------------------------------------
+    # Задачи на сегодня
+    # ------------------------------------------------------------------
+
+    async def get_today(
+        self,
+        user_id: int,
+        start_ts: int,
+        end_ts: int,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict]:
+        """Активные задачи пользователя в диапазоне timestamp [start_ts, end_ts]."""
+        return await self._fetch_paginated(
+            "user_id = $1 AND status = $2 AND time >= $3 AND time <= $4",
+            [user_id, TaskStatus.ACTIVE.value, start_ts, end_ts],
+            limit,
+            offset,
+        )
+
+    async def get_today_count(self, user_id: int, start_ts: int, end_ts: int) -> int:
+        """Количество активных задач пользователя на указанный день."""
+        return await self.db.fetchval(
+            """
+            SELECT COUNT(*) FROM tasks
+            WHERE user_id = $1 AND status = $2 AND time >= $3 AND time <= $4
+            """,
+            user_id, TaskStatus.ACTIVE.value, start_ts, end_ts,
+        )
+
+    # ------------------------------------------------------------------
     # Выполненные задачи
     # ------------------------------------------------------------------
 

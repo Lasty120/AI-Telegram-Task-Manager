@@ -128,7 +128,7 @@ async def process_task_command(
                 lines.append(text)
         lines.extend(no_date)
 
-        await message.answer("\\n".join(lines), parse_mode="HTML", reply_markup=get_main_kb())
+        await message.answer("\n".join(lines), parse_mode="HTML", reply_markup=get_main_kb())
 
     # Конфликты и результаты select отправляем отдельно — у них своя клавиатура
     for result in separate_results:

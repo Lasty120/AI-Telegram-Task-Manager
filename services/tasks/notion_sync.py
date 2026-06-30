@@ -52,18 +52,18 @@ class NotionSyncService:
         Returns:
             ActionResult: Результат выполнения операции с текстовым подтверждением.
         """
-        # 1. Проверяем, настроена ли интеграция с Notion у пользователя
+        # Проверяем, настроена ли интеграция с Notion у пользователя
         notion_token = self.user.get("notion_token")
         notion_db_id = self.user.get("notion_db_id")
 
         if not notion_token or not notion_db_id:
             return ActionResult(text=NotionMessages.not_configured())
 
-        # 2. Проверяем наличие переданных ID задач
+        # Проверяем наличие переданных ID задач
         if not command.task_ids:
             return ActionResult(text=NotionMessages.no_tasks_to_send())
 
-        # 3. Загружаем задачи из репозитория
+        # Загружаем задачи из репозитория
         tasks = await self.task_repo.get_by_ids(
             user_id=self.user["id"],
             ids=command.task_ids,
@@ -96,7 +96,7 @@ class NotionSyncService:
             task_dict["notion_multi_select"] = task_ms
             resolved_tasks.append(task_dict)
 
-        # 4. Отправляем задачи в Notion через API-интеграцию
+        # Отправляем задачи в Notion через API-интеграцию
         notion_user_id = self.user.get("notion_user_id")
         success_count, errors, page_ids = await add_tasks_to_notion(
             notion_token=notion_token,
@@ -105,16 +105,16 @@ class NotionSyncService:
             notion_user_id=notion_user_id,
         )
 
-        # 5. Сохраняем полученные page_id для каждой созданной страницы в Notion
+        # Сохраняем полученные page_id для каждой созданной страницы в Notion
         for tid, pid in page_ids.items():
             await self.task_repo.set_notion_page_id(tid, pid)
 
-        # 6. Отмечаем задачи в репозитории как успешно добавленные в Notion
+        # Отмечаем задачи в репозитории как успешно добавленные в Notion
         if success_count > 0:
             added_ids = list(page_ids.keys())
             await self.task_repo.mark_notion_added(added_ids)
 
-        # 7. Возвращаем результат отправки со статусом и возможными ошибками
+        # Возвращаем результат отправки со статусом и возможными ошибками
         return ActionResult(
             text=NotionMessages.tasks_sent(
                 success_count=success_count,

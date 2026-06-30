@@ -1,9 +1,17 @@
+"""
+handlers/fetch_notion_tasks.py
 
+Хендлер команды /fetch_notion_tasks — импорт задач из Notion в локальную БД.
+"""
+
+import logging
+
+import asyncpg
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from aiosqlite import Connection, Row
 
+from database.repositories import TaskRepository
 from services.notion.fetch_service import NotionFetchService
 from messages import FetchNotionMessages
 
@@ -13,8 +21,8 @@ router = Router()
 @router.message(Command("fetch_notion_tasks"))
 async def fetch_notion_tasks_handler(
     message: Message,
-    db: Connection,
-    user: Row,
+    db: asyncpg.Connection,
+    user: dict,
 ) -> None:
     """
     Обработчик команды /fetch_notion_tasks.
@@ -23,7 +31,7 @@ async def fetch_notion_tasks_handler(
     Время для задач без даты устанавливается на 01.01.2060.
     """
     # Проверяем, настроена ли интеграция с Notion
-    if not user["notion_token"] or not user["notion_db_id"]:
+    if not user.get("notion_token") or not user.get("notion_db_id"):
         await message.answer(
             text=FetchNotionMessages.notion_not_configured(),
             parse_mode="HTML",
@@ -37,7 +45,9 @@ async def fetch_notion_tasks_handler(
     )
 
     try:
-        fetch_service = NotionFetchService(db=db, user=user)
+        # Создаём репозиторий и передаём в сервис (DI-паттерн)
+        task_repo = TaskRepository(db)
+        fetch_service = NotionFetchService(task_repo=task_repo, user=user)
         imported_count, skipped_count = await fetch_service.fetch_and_import()
 
         await waiting_msg.delete()
@@ -64,5 +74,4 @@ async def fetch_notion_tasks_handler(
             parse_mode="HTML",
         )
         # Логируем детали для отладки без раскрытия пользователю
-        import logging
         logging.error(f"Ошибка при импорте задач из Notion для user={user['id']}: {e}")

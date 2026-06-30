@@ -1,33 +1,39 @@
-# tasks.py
+"""
+handlers/tasks.py
+
+Хендлеры для работы со списками задач (активные, выполненные, на сегодня, поиск).
+Изменения (Этап 5):
+  - aiosqlite.Connection/Row убраны.
+  - Вместо старых CRUD-функций используются TaskRepository и SearchRepository,
+    которые инстанцируются прямо в хендлере из asyncpg.Connection.
+"""
+
 from datetime import datetime
+
+import asyncpg
 from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery
-from aiosqlite import Connection, Row
 
-from database.crud.task import (
-    get_user_tasks,
-    get_user_completed_tasks,
-    get_user_tasks_count,
-    get_user_completed_tasks_count,
-    get_user_search,
-    get_tasks_by_ids,
-    get_user_today_tasks,
-    get_user_today_tasks_count
-)
+from database.repositories import TaskRepository, SearchRepository
 from utils.formatters import format_tasks_message
 from messages import TaskMessages
 from config import TIMEZONE, TASKS_LIMIT_OF_PAGES as TASKS_LIMIT
-
-# Импортируем новые утилиты
 from utils.pagination import send_paginated_message, edit_paginated_message
 
 router = Router()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Активные задачи
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.message(F.text.in_(["Мои задачи", "My tasks"]))
-async def get_my_tasks_handler(message: Message, db: Connection, user: Row):
-    total_count = await get_user_tasks_count(db, user["id"])
-    tasks = await get_user_tasks(db, user["id"], limit=TASKS_LIMIT, offset=0)
+async def get_my_tasks_handler(message: Message, db: asyncpg.Connection, user: dict):
+    """Показывает список активных задач пользователя с пагинацией."""
+    task_repo = TaskRepository(db)
+
+    total_count = await task_repo.get_active_count(user_id=user["id"])
+    tasks = await task_repo.get_active(user_id=user["id"], limit=TASKS_LIMIT, offset=0)
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -36,17 +42,20 @@ async def get_my_tasks_handler(message: Message, db: Connection, user: Row):
 
     await send_paginated_message(
         message=message, text=response_text, total_count=total_count,
-        limit=TASKS_LIMIT, prefix="page_active"
+        limit=TASKS_LIMIT, prefix="page_active",
     )
 
 
 @router.callback_query(F.data.startswith("page_active:"))
-async def page_active_callback(callback: CallbackQuery, db: Connection, user: Row):
+async def page_active_callback(callback: CallbackQuery, db: asyncpg.Connection, user: dict):
+    """Постраничная навигация по активным задачам."""
+    task_repo = TaskRepository(db)
+
     page = int(callback.data.split(":")[1])
     offset = (page - 1) * TASKS_LIMIT
 
-    total_count = await get_user_tasks_count(db, user["id"])
-    tasks = await get_user_tasks(db, user["id"], limit=TASKS_LIMIT, offset=offset)
+    total_count = await task_repo.get_active_count(user_id=user["id"])
+    tasks = await task_repo.get_active(user_id=user["id"], limit=TASKS_LIMIT, offset=offset)
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -55,14 +64,21 @@ async def page_active_callback(callback: CallbackQuery, db: Connection, user: Ro
 
     await edit_paginated_message(
         callback=callback, text=response_text, total_count=total_count,
-        page=page, limit=TASKS_LIMIT, prefix="page_active"
+        page=page, limit=TASKS_LIMIT, prefix="page_active",
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Выполненные задачи
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.message(F.text.in_(["Мои выполненные задачи", "My completed tasks"]))
-async def get_my_completed_tasks_handler(message: Message, db: Connection, user: Row):
-    total_count = await get_user_completed_tasks_count(db, user["id"])
-    tasks = await get_user_completed_tasks(db, user["id"], limit=TASKS_LIMIT, offset=0)
+async def get_my_completed_tasks_handler(message: Message, db: asyncpg.Connection, user: dict):
+    """Показывает список выполненных задач пользователя с пагинацией."""
+    task_repo = TaskRepository(db)
+
+    total_count = await task_repo.get_completed_count(user_id=user["id"])
+    tasks = await task_repo.get_completed(user_id=user["id"], limit=TASKS_LIMIT, offset=0)
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -71,17 +87,20 @@ async def get_my_completed_tasks_handler(message: Message, db: Connection, user:
 
     await send_paginated_message(
         message=message, text=response_text, total_count=total_count,
-        limit=TASKS_LIMIT, prefix="page_completed"
+        limit=TASKS_LIMIT, prefix="page_completed",
     )
 
 
 @router.callback_query(F.data.startswith("page_completed:"))
-async def page_completed_callback(callback: CallbackQuery, db: Connection, user: Row):
+async def page_completed_callback(callback: CallbackQuery, db: asyncpg.Connection, user: dict):
+    """Постраничная навигация по выполненным задачам."""
+    task_repo = TaskRepository(db)
+
     page = int(callback.data.split(":")[1])
     offset = (page - 1) * TASKS_LIMIT
 
-    total_count = await get_user_completed_tasks_count(db, user["id"])
-    tasks = await get_user_completed_tasks(db, user["id"], limit=TASKS_LIMIT, offset=offset)
+    total_count = await task_repo.get_completed_count(user_id=user["id"])
+    tasks = await task_repo.get_completed(user_id=user["id"], limit=TASKS_LIMIT, offset=offset)
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -90,48 +109,69 @@ async def page_completed_callback(callback: CallbackQuery, db: Connection, user:
 
     await edit_paginated_message(
         callback=callback, text=response_text, total_count=total_count,
-        page=page, limit=TASKS_LIMIT, prefix="page_completed"
+        page=page, limit=TASKS_LIMIT, prefix="page_completed",
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Результаты поиска (пагинация)
+# ─────────────────────────────────────────────────────────────────────────────
+
 @router.callback_query(F.data.startswith("page_select:"))
-async def page_select_callback(callback: CallbackQuery, db: Connection, user: Row):
+async def page_select_callback(callback: CallbackQuery, db: asyncpg.Connection, user: dict):
+    """
+    Постраничная навигация по результатам поиска.
+    Кэш поиска хранится в SearchRepository.
+    """
+    task_repo = TaskRepository(db)
+    search_repo = SearchRepository(db)
+
     page = int(callback.data.split(":")[1])
     offset = (page - 1) * TASKS_LIMIT
 
-    search_data = await get_user_search(db, user["id"])
+    # Загружаем сохранённый поисковый запрос из репозитория
+    search_data = await search_repo.get(user_id=user["id"])
     if not search_data:
         await callback.answer("Результаты поиска не найдены", show_alert=True)
         return
 
-    task_ids, query = search_data
+    task_ids = search_data["task_ids"]
+    query = search_data["query"]
     total_count = len(task_ids)
 
-    tasks = await get_tasks_by_ids(
-        db=db, user_id=user["id"], task_ids=task_ids,
-        limit=TASKS_LIMIT, offset=offset
+    tasks = await task_repo.get_by_ids(
+        user_id=user["id"], ids=task_ids,
+        limit=TASKS_LIMIT, offset=offset,
     )
 
     response_text = TaskMessages.search_results(
-        query=query, tasks=tasks, tz=TIMEZONE
+        query=query, tasks=tasks, tz=TIMEZONE,
     )
 
     await edit_paginated_message(
         callback=callback, text=response_text, total_count=total_count,
-        page=page, limit=TASKS_LIMIT, prefix="page_select"
+        page=page, limit=TASKS_LIMIT, prefix="page_select",
     )
 
 
-@router.message(F.text.in_(["Задачи на сегодня", "Tasks for today"]))
-async def get_today_tasks_handler(message: Message, db: Connection, user: Row):
-    now = datetime.now(TIMEZONE)
-    start_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0))
-    end_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59))
-    start_ts = int(start_of_day.timestamp())
-    end_ts = int(end_of_day.timestamp())
+# ─────────────────────────────────────────────────────────────────────────────
+# Задачи на сегодня
+# ─────────────────────────────────────────────────────────────────────────────
 
-    total_count = await get_user_today_tasks_count(db, user["id"], start_ts, end_ts)
-    tasks = await get_user_today_tasks(db, user["id"], start_ts, end_ts, limit=TASKS_LIMIT, offset=0)
+@router.message(F.text.in_(["Задачи на сегодня", "Tasks for today"]))
+async def get_today_tasks_handler(message: Message, db: asyncpg.Connection, user: dict):
+    """Показывает активные задачи пользователя на текущий день."""
+    task_repo = TaskRepository(db)
+
+    now = datetime.now(TIMEZONE)
+    start_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0)).timestamp())
+    end_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59)).timestamp())
+
+    total_count = await task_repo.get_today_count(user_id=user["id"], start_ts=start_ts, end_ts=end_ts)
+    tasks = await task_repo.get_today(
+        user_id=user["id"], start_ts=start_ts, end_ts=end_ts,
+        limit=TASKS_LIMIT, offset=0,
+    )
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -140,23 +180,27 @@ async def get_today_tasks_handler(message: Message, db: Connection, user: Row):
 
     await send_paginated_message(
         message=message, text=response_text, total_count=total_count,
-        limit=TASKS_LIMIT, prefix="page_today"
+        limit=TASKS_LIMIT, prefix="page_today",
     )
 
 
 @router.callback_query(F.data.startswith("page_today:"))
-async def page_today_callback(callback: CallbackQuery, db: Connection, user: Row):
+async def page_today_callback(callback: CallbackQuery, db: asyncpg.Connection, user: dict):
+    """Постраничная навигация по задачам на сегодня."""
+    task_repo = TaskRepository(db)
+
     page = int(callback.data.split(":")[1])
     offset = (page - 1) * TASKS_LIMIT
 
     now = datetime.now(TIMEZONE)
-    start_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0))
-    end_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59))
-    start_ts = int(start_of_day.timestamp())
-    end_ts = int(end_of_day.timestamp())
+    start_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0)).timestamp())
+    end_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59)).timestamp())
 
-    total_count = await get_user_today_tasks_count(db, user["id"], start_ts, end_ts)
-    tasks = await get_user_today_tasks(db, user["id"], start_ts, end_ts, limit=TASKS_LIMIT, offset=offset)
+    total_count = await task_repo.get_today_count(user_id=user["id"], start_ts=start_ts, end_ts=end_ts)
+    tasks = await task_repo.get_today(
+        user_id=user["id"], start_ts=start_ts, end_ts=end_ts,
+        limit=TASKS_LIMIT, offset=offset,
+    )
 
     response_text = format_tasks_message(
         tasks=tasks,
@@ -165,5 +209,5 @@ async def page_today_callback(callback: CallbackQuery, db: Connection, user: Row
 
     await edit_paginated_message(
         callback=callback, text=response_text, total_count=total_count,
-        page=page, limit=TASKS_LIMIT, prefix="page_today"
+        page=page, limit=TASKS_LIMIT, prefix="page_today",
     )
