@@ -14,6 +14,7 @@ from database.repositories import TaskRepository
 from messages import NotionMessages, TaskMessages, NotionCommentMessages
 from database.schemas import TaskActionSchema
 from utils.action_result import ActionResult
+from utils.formatters import capitalize_first
 
 # Сервисы Notion API
 from services.notion.service import (
@@ -172,11 +173,14 @@ class NotionSyncService:
         if not comment_text or not comment_text.strip():
             return ActionResult(text=NotionCommentMessages.comment_text_missing())
 
+        # Первая буква комментария всегда заглавная — нормализуем перед отправкой
+        normalized_comment = capitalize_first(comment_text.strip())
+
         # Вызываем API Notion для создания комментария на странице
         success = await add_comment_to_notion_page(
             notion_token=notion_token,
             page_id=page_id,
-            comment_text=comment_text.strip(),
+            comment_text=normalized_comment,
         )
 
         if success:
