@@ -3,6 +3,7 @@ from datetime import datetime
 from config import TIMEZONE
 import logging
 from .client import NotionClient
+from .utils import find_importance_prop
 import asyncio
 
 # Проверка на метку «задача без срока» — чтобы не отправлять 2060 год в Notion
@@ -116,10 +117,10 @@ def _build_page_body(
             "rich_text": [{"text": {"content": task["details"]}}]
         }
 
-    # Важность — ищем поле типа "select"
-    select_prop = next(
-        (k for k, v in db_props.items() if v == "select"), None
-    )
+    # Важность — ищем select-поле с названием, начинающимся на ключевые слова
+    # (Важность, Приоритет, Priority, Importance и т.д.) через утилиту find_importance_prop.
+    # Не берём произвольный первый select, чтобы не путать с полем Статуса.
+    select_prop = find_importance_prop(db_props)
     if select_prop and task.get("importance"):
         properties[select_prop] = {"select": {"name": task["importance"]}}
 
@@ -494,10 +495,9 @@ def _build_update_properties(
             "rich_text": [{"text": {"content": task["details"]}}]
         }
 
-    # 4. Важность (select, исключая свойство "status")
-    select_prop = next(
-        (k for k, v in db_props.items() if v == "select" and k.strip().lower() != "status"), None
-    )
+    # 4. Важность — ищем select-поле с названием из ключевых слов через find_importance_prop.
+    # Это гарантирует, что не будет выбрано поле "Статус" или любой другой произвольный select.
+    select_prop = find_importance_prop(db_props)
     if select_prop and task.get("importance"):
         properties[select_prop] = {"select": {"name": task["importance"]}}
 
