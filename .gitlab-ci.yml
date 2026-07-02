@@ -4,7 +4,7 @@ services:
   - docker:dind
 
 variables:
-  DOCKER_REGISTRY: $CONTAINER_REGISTRY
+  DOCKER_REGISTRY: $CI_REGISTRY
   DOCKER_IMAGE: $CI_REGISTRY_IMAGE
 stages:
   - build
@@ -16,7 +16,7 @@ build_image:
     - master
   script:
     # Build образа и сохранение в Registry
-    - docker login -u $CONTAINER_REGISTRY_USER -p $CONTAINER_REGISTRY_PASSWORD $CONTAINER_REGISTRY
+    - docker login -u $CONTAINER_REGISTRY_USER -p $CONTAINER_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -t $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA .
     - docker push $DOCKER_IMAGE:$CI_COMMIT_SHORT_SHA
 
@@ -40,11 +40,4 @@ deploy:
         -F "variables[DEPLOYMENT_LOGS_USER]=$CONTAINER_REGISTRY_USER" \
         -F "variables[DEPLOYMENT_LOGS_PASSWORD]=$CONTAINER_REGISTRY_PASSWORD" \
         https://$CI_SERVER_HOST/api/v4/projects/$ROOT_DEPLOY_TRIGGER_PROJECT/trigger/pipeline
-  variables:
-    # Тэг контейнера для деплоймента
-    DEPLOYMENT_TAG: $CI_COMMIT_SHORT_SHA
-    # Название деплоймента (этот проект)
-    DEPLOYMENT_NAME: $CI_PROJECT_PATH
-    # Логин и пароль для HTTP авторизации для просмотра логов
-    DEPLOYMENT_LOGS_USER: $CONTAINER_REGISTRY_USER
-    DEPLOYMENT_LOGS_PASSWORD: $CONTAINER_REGISTRY_PASSWORD
+
