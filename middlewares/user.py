@@ -1,16 +1,16 @@
-from typing import Callable, Dict, Any, Awaitable
+from typing import Any, Awaitable, Callable, Dict
 
+import asyncpg
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-import aiosqlite
-
-# Импортируй свою обновленную функцию CRUD
-from database.crud.user import get_or_create_user
+from database.repositories import UserRepository
 from utils.context import user_lang
 
 
-# Middleware на получение и создание юзера
+# Middleware для получения или создания пользователя при каждом Update.
+# Использует UserRepository (asyncpg) вместо старых CRUD-функций aiosqlite.
+
 class UserMiddleware(BaseMiddleware):
     async def __call__(
             self,
@@ -18,21 +18,27 @@ class UserMiddleware(BaseMiddleware):
             event: TelegramObject,
             data: Dict[str, Any],
     ):
-
-        db: aiosqlite.Connection = data["db"]
+        db: asyncpg.Connection = data["db"]
         tg_user = data["event_from_user"]
+
+        # Если в Update нет отправителя — пропускаем без создания пользователя
         if not tg_user:
             return await handler(event, data)
 
-        # Передаем соединение db в твою CRUD функцию
-        user = await get_or_create_user(
-            db=db,
-            tg_id=tg_user.id,
-        )
+        user_repo = UserRepository(db)
+
+        # Пытаемся найти пользователя — если нет, создаём
+        user = await user_repo.get_by_tg_id(tg_user.id)
+        if not user:
+            user = await user_repo.create(tg_id=tg_user.id, lang="ru")
+            # Если create вернул None (гонка ON CONFLICT) — делаем повторный SELECT
+            if not user:
+                user = await user_repo.get_by_tg_id(tg_user.id)
 
         data["user"] = user
 
-        lang = user["lang"] if "lang" in user.keys() else "ru"
+        # Устанавливаем язык пользователя в контекстную переменную
+        lang = user["lang"] if user and "lang" in user else "ru"
         token = user_lang.set(lang)
         try:
             return await handler(event, data)

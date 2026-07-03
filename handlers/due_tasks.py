@@ -5,13 +5,13 @@ handlers/due_tasks.py
 Показывает все просроченные задачи пользователя и обрабатывает
 инлайн-кнопки для массовых действий над ними.
 """
-import logging
 
+import asyncpg
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiosqlite import Connection, Row
 
 from config import TIMEZONE, TASKS_LIMIT_OF_PAGES as TASKS_LIMIT
+from database.repositories import TaskRepository
 from keyboards.due_tasks_kb import get_due_tasks_keyboard
 from messages import DueTasksMessages, TaskMessages
 from services.tasks.due_sync_service import DueSyncService
@@ -26,12 +26,13 @@ router = Router()
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.message(F.text.in_(["Просроченные задачи", "Overdue tasks"]))
-async def due_tasks_handler(message: Message, db: Connection, user: Row) -> None:
+async def due_tasks_handler(message: Message, db: asyncpg.Connection, user: dict) -> None:
     """
     Показывает список всех активных просроченных задач пользователя.
     Прикрепляет инлайн-клавиатуру с действиями и подсказку о ручном выполнении.
     """
-    service = DueSyncService(db=db, user=user)
+    task_repo = TaskRepository(db)
+    service = DueSyncService(task_repo=task_repo, user=user)
     tasks = await service.get_due_tasks()
 
     if not tasks:
@@ -51,9 +52,6 @@ async def due_tasks_handler(message: Message, db: Connection, user: Row) -> None
     header = DueTasksMessages.due_tasks_header(count=len(tasks))
     full_text = f"{header}\n\n{tasks_text}"
 
-    # Если задач больше лимита — добавляем пагинацию поверх инлайн-клавиатуры.
-    # Но для просроченных задач это редкий случай, поэтому отправляем
-    # полный текст с инлайн-кнопками действий без пагинации.
     await message.answer(
         text=full_text,
         parse_mode="HTML",
@@ -68,8 +66,8 @@ async def due_tasks_handler(message: Message, db: Connection, user: Row) -> None
 @router.callback_query(F.data == "due_tasks:complete_all")
 async def complete_all_due_callback(
     callback: CallbackQuery,
-    db: Connection,
-    user: Row,
+    db: asyncpg.Connection,
+    user: dict,
 ) -> None:
     """
     Помечает все активные просроченные задачи пользователя как выполненные.
@@ -77,7 +75,8 @@ async def complete_all_due_callback(
     """
     await callback.answer()
 
-    service = DueSyncService(db=db, user=user)
+    task_repo = TaskRepository(db)
+    service = DueSyncService(task_repo=task_repo, user=user)
     completed_count = await service.complete_all_due()
 
     if completed_count == 0:
@@ -97,22 +96,20 @@ async def complete_all_due_callback(
 @router.callback_query(F.data == "due_tasks:sync_notion")
 async def sync_notion_callback(
     callback: CallbackQuery,
-    db: Connection,
-    user: Row,
+    db: asyncpg.Connection,
+    user: dict,
 ) -> None:
     """
     Синхронизирует статусы задач с Notion:
     - Получает все активные задачи с notion_page_id.
     - Запрашивает Notion, у каких страниц статус начинается на «done».
-    - Задачи без совпадения в Notion (notion_page_id в БД, но уже «done» там) —
-      помечаются выполненными локально.
-    - Если в Notion нет совпадения — ничего не делаем (задача всё ещё активна там).
+    - Задачи с таким статусом помечаются выполненными локально.
     """
     await callback.answer()
 
     # Проверяем наличие Notion-интеграции
-    notion_token = user["notion_token"] if "notion_token" in user.keys() else None
-    notion_db_id = user["notion_db_id"] if "notion_db_id" in user.keys() else None
+    notion_token = user.get("notion_token")
+    notion_db_id = user.get("notion_db_id")
 
     if not notion_token or not notion_db_id:
         await callback.message.edit_text(
@@ -127,8 +124,8 @@ async def sync_notion_callback(
         parse_mode="HTML",
     )
 
-
-    service = DueSyncService(db=db, user=user)
+    task_repo = TaskRepository(db)
+    service = DueSyncService(task_repo=task_repo, user=user)
     synced_count = await service.sync_completed_from_notion()
 
     await loading_msg.delete()
@@ -136,12 +133,3 @@ async def sync_notion_callback(
         text=DueTasksMessages.sync_notion_success(count=synced_count),
         parse_mode="HTML",
     )
-    # except Exception as e:
-    #     logging.error(
-    #         f"Ошибка синхронизации Notion для user_id={user['id']}: {e}"
-    #     )
-    #     await loading_msg.delete()
-    #     await callback.message.answer(
-    #         text=DueTasksMessages.sync_notion_error(),
-    #         parse_mode="HTML",
-    #     )

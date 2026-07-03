@@ -1,54 +1,71 @@
-from datetime import datetime, timedelta
-import aiosqlite
-import logging
+"""
+services/scheduler.py
+
+Глобальный планировщик APScheduler + функции фоновых уведомлений и рассылок.
+Изменения (Этап 5):
+  - aiosqlite полностью убран.
+  - Для разовых фоновых задач (send_task_notification, send_daily_tasks_summary)
+    используется пул asyncpg из database.pool.get_pool().
+  - init_scheduler принимает пул явно и передаёт его в send_daily_tasks_summary.
+  - Репозитории UserRepository и TaskRepository создаются внутри каждой фоновой функции.
+"""
 
 import asyncio
+import logging
+from datetime import datetime, timedelta
 
-from messages import TaskMessages
-from utils.context import user_lang
-
+import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot
 
 from keyboards.inline_keyboards import get_task_action_keyboard
-from config import DB_PATH, TIMEZONE, TASKS_LIMIT_OF_PAGES as TASKS_LIMIT
-from database.crud.user import get_all_users
-from database.crud.task import get_user_today_tasks, get_user_today_tasks_count
-from utils.pagination import send_paginated_message_to_chat
-from utils.formatters import format_tasks_message
-from services.notion.service import update_task_status_in_notion
-# Задачи без срока (метка 2060) не должны попадать в планировщик напоминаний
+from config import TIMEZONE, TASKS_LIMIT_OF_PAGES as TASKS_LIMIT
+from database.repositories import UserRepository, TaskRepository
+from database.pool import get_pool
+from messages import TaskMessages
+from utils.context import user_lang
 from utils.date_utils import is_fallback_timestamp
+from utils.formatters import format_tasks_message
+from utils.pagination import send_paginated_message_to_chat
 
-# Создаем глобальный инстанс планировщика
+
+# Глобальный инстанс планировщика
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 
-async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id: int, task_details: str = None, task_importance: str = None):
+# ─────────────────────────────────────────────────────────────────────────────
+# Уведомление о начале задачи
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_task_notification(
+    bot: Bot,
+    user_id: int,
+    task_text: str,
+    task_id: int,
+    task_details: str = None,
+    task_importance: str = None,
+):
+    """
+    Отправляет пользователю уведомление о наступлении времени задачи.
+    Берёт соединение из глобального пула asyncpg для получения языка и Notion-данных.
+    """
     try:
         lang = "ru"
-        notion_token = notion_db_id = notion_page_id = None
-        try:
-            async with aiosqlite.connect(DB_PATH) as db:
-                db.row_factory = aiosqlite.Row
-                async with db.execute(
-                    """
-                    SELECT users.lang, users.notion_token, users.notion_db_id, users.notion_status_notified, tasks.notion_page_id
-                    FROM users
-                    JOIN tasks ON tasks.user_id = users.id
-                    WHERE users.tg_id = ? AND tasks.id = ?
-                    """,
-                    (user_id, task_id)
-                ) as cursor:
-                    row = await cursor.fetchone()
-                    if row:
-                        lang = row["lang"]
-                        notion_token = row["notion_token"]
-                        notion_db_id = row["notion_db_id"]
-                        notion_page_id = row["notion_page_id"]
-                        notion_status_notified = row["notion_status_notified"]
-        except Exception as db_err:
-            logging.error(f"Ошибка получения языка из БД для {user_id}: {db_err}")
+        # Читаем язык пользователя и данные Notion из БД через пул
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT u.lang, u.notion_token, u.notion_db_id,
+                       u.notion_status_notified, t.notion_page_id
+                FROM users u
+                JOIN tasks t ON t.user_id = u.id
+                WHERE u.tg_id = $1 AND t.id = $2
+                """,
+                user_id, task_id,
+            )
+            if row:
+                lang = row["lang"] or "ru"
 
         token = user_lang.set(lang)
         try:
@@ -60,143 +77,167 @@ async def send_task_notification(bot: Bot, user_id: int, task_text: str, task_id
             chat_id=user_id,
             text=text,
             parse_mode="HTML",
-            reply_markup=get_task_action_keyboard(task_id)
+            reply_markup=get_task_action_keyboard(task_id),
         )
 
     except Exception as e:
-        logging.error(f"Не удалось отправить уведомление юзеру {user_id}: {e}")
+        logging.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Инициализация планировщика при старте бота
+# ─────────────────────────────────────────────────────────────────────────────
 
 async def init_scheduler(bot: Bot):
-    """Полная сборка планировщика: подключаемся к БД, забиваем задачи в очередь и стартуем"""
+    """
+    Полная сборка планировщика:
+      1. Читает активные задачи из БД через asyncpg-пул.
+      2. Добавляет напоминания в APScheduler.
+      3. Регистрирует ежедневные рассылки задач.
+      4. Запускает планировщик.
+    """
     tz = TIMEZONE
+    pool = get_pool()
 
-    # 1. Открываем короткое соединение с БД только ради вычитки активных задач
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-
-        # Запрашиваем только невыполненные задачи с Telegram ID пользователя
-        async with db.execute(
+    # 1. Загружаем все активные задачи из БД одним запросом
+    async with pool.acquire() as conn:
+        pending_tasks = await conn.fetch(
             """
-            SELECT tasks.id, users.tg_id, tasks.content, tasks.details, tasks.time, tasks.duration, tasks.importance 
-            FROM tasks 
-            JOIN users ON tasks.user_id = users.id 
-            WHERE tasks.status = 0
-            """
-        ) as cursor:
-            pending_tasks = await cursor.fetchall()
+            SELECT t.id, u.tg_id, t.content, t.details, t.time, t.duration, t.importance
+            FROM tasks t
+            JOIN users u ON t.user_id = u.id
+            WHERE t.status = 0
+            """,
+        )
 
-    # 2. Проходимся по задачам и добавляем их в APScheduler
+    # 2. Добавляем напоминания о задачах в APScheduler
     now = datetime.now(tz)
-
     for task in pending_tasks:
         try:
-            # Парсим UNIX timestamp из БД
-            task_time = datetime.fromtimestamp(int(task['time']), tz=tz)
-            task_dur = task['duration'] if 'duration' in task.keys() and task['duration'] else 0
-            task_imp = task['importance'] if 'importance' in task.keys() else None
-
-            # 1. Напоминание о начале задачи
-            # Задачи без срока (метка 2060) пропускаем — напоминания по ним не должны приходить
-            if is_fallback_timestamp(int(task['time'])):
+            # Пропускаем задачи без срока (метка 2060)
+            if is_fallback_timestamp(int(task["time"])):
                 continue
+
+            task_time = datetime.fromtimestamp(int(task["time"]), tz=tz)
+            task_imp = task["importance"]
+
+            # Планируем напоминание только для будущих задач
             if task_time > now:
                 scheduler.add_job(
                     send_task_notification,
-                    trigger='date',
+                    trigger="date",
                     run_date=task_time,
                     kwargs={
-                        'bot': bot,
-                        'user_id': task['tg_id'],  # Передаем tg_id
-                        'task_text': task['content'],
-                        'task_details': task['details'],  # Передаем details
-                        'task_id': task['id'],  # <-- Передаем ID задачи
-                        'task_importance': task_imp,
+                        "bot": bot,
+                        "user_id": task["tg_id"],
+                        "task_text": task["content"],
+                        "task_details": task["details"],
+                        "task_id": task["id"],
+                        "task_importance": task_imp,
                     },
                     id=f"task_{task['id']}",
                     replace_existing=True,
-                    misfire_grace_time=3600
+                    misfire_grace_time=3600,
                 )
         except Exception as e:
             logging.error(f"Ошибка при загрузке задачи ID {task.get('id')} в планировщик: {e}")
 
-    # 2. Добавляем ежедневные задачи в 9:00 и 21:00
+    # 3. Ежедневная рассылка в 9:00 и 21:00
     scheduler.add_job(
         send_daily_tasks_summary,
-        trigger='cron',
+        trigger="cron",
         hour=9,
         minute=0,
         args=[bot],
         id="daily_tasks_morning",
         replace_existing=True,
-        misfire_grace_time=3600
+        misfire_grace_time=3600,
     )
     scheduler.add_job(
         send_daily_tasks_summary,
-        trigger='cron',
+        trigger="cron",
         hour=21,
         minute=0,
         args=[bot],
         id="daily_tasks_evening",
         replace_existing=True,
-        misfire_grace_time=3600
+        misfire_grace_time=3600,
     )
 
-    # 3. Запускаем тиканье планировщика
+    # 4. Запускаем планировщик
     scheduler.start()
     logging.info("APScheduler успешно запущен и наполнен задачами из БД.")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Ежедневная рассылка задач на сегодня
+# ─────────────────────────────────────────────────────────────────────────────
+
 async def send_daily_tasks_summary(bot: Bot):
-    """Отправляет всем пользователям список задач на сегодня в 9:00 и 21:00"""
+    """
+    Отправляет всем пользователям список задач на сегодня в 9:00 и 21:00.
+    Использует пул asyncpg для получения всех пользователей и их задач.
+    """
     logging.info("Запуск рассылки задач на сегодня...")
+
+    now = datetime.now(TIMEZONE)
+    start_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0)).timestamp())
+    end_ts = int(TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59)).timestamp())
+
+    pool = get_pool()
+
     try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            db.row_factory = aiosqlite.Row
-            users = await get_all_users(db)
-            
-            # Для каждого пользователя получаем задачи за сегодня
-            now = datetime.now(TIMEZONE)
-            start_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 0, 0, 0))
-            end_of_day = TIMEZONE.localize(datetime(now.year, now.month, now.day, 23, 59, 59))
-            start_ts = int(start_of_day.timestamp())
-            end_ts = int(end_of_day.timestamp())
-            
+        async with pool.acquire() as conn:
+            user_repo = UserRepository(conn)
+            task_repo = TaskRepository(conn)
+
+            users = await user_repo.get_all()
+
             for user in users:
                 user_id = user["id"]
                 tg_id = user["tg_id"]
-                lang = user["lang"]
-                
-                # Устанавливаем язык в контекст
+                lang = user["lang"] or "ru"
+
+                # Устанавливаем язык пользователя в контекстную переменную
                 token = user_lang.set(lang)
                 try:
-                    total_count = await get_user_today_tasks_count(db, user_id, start_ts, end_ts)
-                    # Если у пользователя нет задач, не отправляем пустое сообщение
+                    total_count = await task_repo.get_today_count(
+                        user_id=user_id, start_ts=start_ts, end_ts=end_ts
+                    )
+                    # Если задач нет — не отправляем пустое сообщение
                     if total_count == 0:
                         continue
-                        
-                    tasks = await get_user_today_tasks(db, user_id, start_ts, end_ts, limit=TASKS_LIMIT, offset=0)
-                    
+
+                    tasks = await task_repo.get_today(
+                        user_id=user_id,
+                        start_ts=start_ts,
+                        end_ts=end_ts,
+                        limit=TASKS_LIMIT,
+                        offset=0,
+                    )
+
                     response_text = format_tasks_message(
                         tasks=tasks,
                         empty_text=TaskMessages.today_tasks_empty(),
                     )
 
-                    full_text = f"{response_text}"
-                    
-                    # Отправляем сообщение с пагинацией
                     await send_paginated_message_to_chat(
                         bot=bot,
                         chat_id=tg_id,
-                        text=full_text,
+                        text=response_text,
                         total_count=total_count,
                         limit=TASKS_LIMIT,
-                        prefix="page_today"
+                        prefix="page_today",
                     )
+
                 except Exception as user_err:
-                    logging.error(f"Ошибка при отправке сводки задач пользователю {tg_id}: {user_err}")
+                    logging.error(
+                        f"Ошибка при отправке сводки задач пользователю {tg_id}: {user_err}"
+                    )
                 finally:
                     user_lang.reset(token)
+                    # Небольшая пауза между отправками — защита от flood limit
                     await asyncio.sleep(0.05)
+
     except Exception as e:
         logging.error(f"Ошибка при выполнении рассылки задач: {e}")

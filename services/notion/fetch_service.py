@@ -1,14 +1,19 @@
+"""
+services/notion/fetch_service.py
+
+Сервис импорта задач из Notion в локальную базу данных.
+Изменения (Этап 5):
+  - NotionFetchService.__init__ принимает task_repo: TaskRepository вместо db: Connection.
+  - Все прямые вызовы database.crud.task.* заменены на методы task_repo.
+"""
+
 import logging
 from datetime import datetime
 
-from aiosqlite import Connection, Row
-
 from .client import NotionClient
-from database.crud.task import create_task, get_tasks_by_notion_page_ids, mark_task_as_from_notion
+from database.repositories import TaskRepository
 # Используем общую константу из utils.date_utils — принцип DRY
 from utils.date_utils import FALLBACK_TASK_TIMESTAMP
-
-
 
 
 def _extract_title(properties: dict) -> str | None:
@@ -197,43 +202,44 @@ def _parse_notion_page(page: dict) -> dict | None:
         "assignee_ids": _extract_assignee_ids(properties),
     }
 
+
 async def fetch_all_notion_pages(
-            client: NotionClient,
-            notion_db_id: str,
-    ) -> list[dict]:
-        """
-        Загружает все страницы из Notion-базы данных с поддержкой пагинации.
+        client: NotionClient,
+        notion_db_id: str,
+) -> list[dict]:
+    """
+    Загружает все страницы из Notion-базы данных с поддержкой пагинации.
 
-        Args:
-            client: Авторизованный клиент Notion API.
-            notion_db_id: Идентификатор базы данных Notion.
+    Args:
+        client: Авторизованный клиент Notion API.
+        notion_db_id: Идентификатор базы данных Notion.
 
-        Returns:
-            Список словарей — страниц из Notion.
-        """
-        pages = []
-        has_more = True
-        start_cursor = None
+    Returns:
+        Список словарей — страниц из Notion.
+    """
+    pages = []
+    has_more = True
+    start_cursor = None
 
-        while has_more:
-            body: dict = {"page_size": 100}
-            if start_cursor:
-                body["start_cursor"] = start_cursor
+    while has_more:
+        body: dict = {"page_size": 100}
+        if start_cursor:
+            body["start_cursor"] = start_cursor
 
-            resp = await client.post(f"/v1/databases/{notion_db_id}/query", json=body)
+        resp = await client.post(f"/v1/databases/{notion_db_id}/query", json=body)
+        if resp.status != 200:
+            # Пробуем альтернативный эндпоинт (data_sources)
+            resp = await client.post(f"/v1/data_sources/{notion_db_id}/query", json=body)
             if resp.status != 200:
-                # Пробуем альтернативный эндпоинт (data_sources)
-                resp = await client.post(f"/v1/data_sources/{notion_db_id}/query", json=body)
-                if resp.status != 200:
-                    logging.error(f"Notion fetch: не удалось получить страницы (status={resp.status})")
-                    break
+                logging.error(f"Notion fetch: не удалось получить страницы (status={resp.status})")
+                break
 
-            data = await resp.json()
-            pages.extend(data.get("results", []))
-            has_more = data.get("has_more", False)
-            start_cursor = data.get("next_cursor")
+        data = await resp.json()
+        pages.extend(data.get("results", []))
+        has_more = data.get("has_more", False)
+        start_cursor = data.get("next_cursor")
 
-        return pages
+    return pages
 
 
 class NotionFetchService:
@@ -245,18 +251,19 @@ class NotionFetchService:
     - Фильтрует те, что уже есть в локальной БД (по notion_page_id)
     - Создаёт новые записи для отсутствующих задач
     - Помечает их как добавленные из Notion (notion_added=1, notion_page_id заполнен)
+
+    Изменения (Этап 5):
+    - Принимает task_repo: TaskRepository вместо db: aiosqlite.Connection.
     """
 
-    def __init__(self, db: Connection, user: Row):
+    def __init__(self, task_repo: TaskRepository, user: dict):
         """
         Args:
-            db: Соединение с базой данных SQLite.
-            user: Запись пользователя из БД (Row с полями notion_token, notion_db_id и т.д.).
+            task_repo: Репозиторий задач (asyncpg).
+            user: Словарь пользователя из БД.
         """
-        self.db = db
+        self.task_repo = task_repo
         self.user = user
-
-
 
     async def fetch_and_import(self) -> tuple[int, int]:
         """
@@ -274,7 +281,7 @@ class NotionFetchService:
         if not notion_token or not notion_db_id:
             raise ValueError("Notion не настроен")
 
-        #  Получаем все страницы из Notion
+        # Получаем все страницы из Notion
         client = NotionClient(notion_token)
         pages = await fetch_all_notion_pages(client, notion_db_id)
 
@@ -289,7 +296,7 @@ class NotionFetchService:
             return 0, 0
 
         # Получаем notion_user_id текущего пользователя для фильтрации по assignee
-        notion_user_id: str | None = self.user["notion_user_id"] if "notion_user_id" in self.user.keys() else None
+        notion_user_id: str | None = self.user.get("notion_user_id")
 
         # Применяем бизнес-фильтры:
         #    а) только задачи, назначенные на текущего пользователя (если user_id известен)
@@ -307,12 +314,11 @@ class NotionFetchService:
         # Считаем пропущенные по фильтрам (done + чужие) как skipped
         filter_skipped = len(valid_pages) - len(filtered_pages)
 
-        # Получаем список page_id, которые уже есть в локальной БД
+        # Получаем список page_id, которые уже есть в локальной БД через репозиторий
         all_page_ids = [p["notion_page_id"] for p in filtered_pages]
-        existing_page_ids = await get_tasks_by_notion_page_ids(
-            db=self.db,
+        existing_page_ids = await self.task_repo.get_existing_notion_page_ids(
+            user_id=self.user["id"],
             notion_page_ids=all_page_ids,
-            user_id=self.user["id"]
         )
 
         # Отфильтровываем уже импортированные задачи
@@ -326,24 +332,22 @@ class NotionFetchService:
         if not new_pages:
             return 0, skipped_count
 
-        # Создаём новые задачи в локальной БД
+        # Создаём новые задачи в локальной БД через репозиторий
         imported_count = 0
         for page in new_pages:
             try:
-                task_id = await create_task(
-                    db=self.db,
+                task_id = await self.task_repo.create(
                     content=page["content"],
-                    time=page["time"],
+                    time_val=page["time"],
                     user_id=self.user["id"],
                     details=page.get("details"),
                     importance=page.get("importance"),
                     notion_status=page.get("notion_status"),
                 )
                 # Сразу помечаем задачу как связанную с Notion-страницей
-                await mark_task_as_from_notion(
-                    db=self.db,
+                await self.task_repo.mark_from_notion(
                     task_id=task_id,
-                    notion_page_id=page["notion_page_id"]
+                    notion_page_id=page["notion_page_id"],
                 )
                 imported_count += 1
             except Exception as e:
