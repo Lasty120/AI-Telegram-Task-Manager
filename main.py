@@ -1,8 +1,7 @@
 import asyncio
 import logging
-from aiohttp import web
 from aiogram import Bot, Dispatcher
- 
+
 from handlers import get_handlers_router
 from config import TOKEN
 from middlewares.database import DbSessionMiddleware
@@ -10,63 +9,27 @@ from middlewares.user import UserMiddleware
 from database.pool import create_pool, close_pool
 from database.migrations.runner import run_migrations
 from services.scheduler import init_scheduler
- 
- 
-async def _healthcheck(request: web.Request) -> web.Response:
-    """Отвечает 200 OK — Kubernetes на Alem Plus использует это
-    как liveness/readiness probe. Бот работает через long polling
-    и своего HTTP-сервера не имеет, поэтому этот эндпоинт нужен
-    исключительно для прохождения проверок платформы."""
-    return web.Response(text="ok")
- 
- 
-async def start_healthcheck_server() -> None:
-    """Поднимает лёгкий aiohttp-сервер на 80 порту параллельно с polling.
-    Без этого под считается нездоровым и Kubernetes будет его перезапускать,
-    даже если сам бот работает исправно."""
-    app = web.Application()
-    app.router.add_get("/healthz", _healthcheck)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 80)
-    await site.start()
-    logging.info("Healthcheck-сервер запущен на порту 80 (/healthz)")
- 
- 
+
+
+
 async def main():
     dp = Dispatcher()
     bot = Bot(token=TOKEN)
-<<<<<<< HEAD
 
     # Создаём пул соединений с PostgreSQL и сразу применяем миграции
     pool = await create_pool()
     await run_migrations(pool)
 
-=======
- 
-    # Создаём пул соединений с PostgreSQL и сразу применяем миграции
-    pool = await create_pool()
-    await run_migrations(pool)
- 
->>>>>>> upstream/main
     dp.include_router(get_handlers_router())
- 
+
     await init_scheduler(bot)
- 
+
     await bot.delete_webhook(drop_pending_updates=True)
     # Middleware теперь раздаёт хендлерам asyncpg.Connection из пула,
     # а не открывает aiosqlite.connect на каждый Update
     dp.update.middleware(DbSessionMiddleware(pool=pool))
     dp.update.middleware(UserMiddleware())
-<<<<<<< HEAD
 
-=======
- 
-    # Открываем 80 порт до входа в цикл polling — Kubernetes должен
-    # увидеть под "живым" сразу после запуска, а не после первого long-poll
-    await start_healthcheck_server()
- 
->>>>>>> upstream/main
     try:
         # Бесконечный цикл для автоматического переподключения
         while True:
@@ -79,11 +42,7 @@ async def main():
     finally:
         # Закрываем пул соединений при остановке приложения
         await close_pool(pool)
-<<<<<<< HEAD
 
-=======
- 
->>>>>>> upstream/main
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print("Bot has been started")
